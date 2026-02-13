@@ -23,10 +23,10 @@ I built GhostType for a simple reason: I loved the *concept* of **Typeless** —
 
 > **但作为一个学生，我遇到了两个问题：**
 
-1. **Cost.** The subscription model was steep for my budget. I kept thinking: *"I just want to dictate into a text field. Why does this cost $10/month?"*
+1. **Cost.** The subscription model was steep for my budget. I kept thinking: *"I just want to dictate into a text field. Why does this cost $30/month?"*
 2. **Privacy.** I talk about private ideas, unfinished code, half-baked plans. I wasn't comfortable sending all of that — raw audio included — to someone else's server.
 
-> 1. **价格。** 订阅制对我的预算来说太贵了。我一直在想：*"我只是想对着输入框说话而已，为什么要花 10 美元/月？"*
+> 1. **价格。** 订阅制对我的预算来说太贵了。我一直在想：*"我只是想对着输入框说话而已，为什么要花 30 美元/月？"*
 > 2. **隐私。** 我会说一些私人想法、未完成的代码、不成熟的方案。把这些东西（包括原始音频）全部发送到别人的服务器，我不太放心。
 
 Then I realized: modern Macs with Apple Silicon are *powerful*. Whisper runs locally. LLMs run locally. We don't need the cloud for this anymore.
