@@ -1470,6 +1470,16 @@ struct EnginesSettingsPane: View {
             saveButton(label: "Save Groq LLM Key") {
                 saveKey(viewModel.credentialDrafts.llmGroqKey, for: .llmGroq, providerLabel: "Groq LLM")
             }
+        case .ollama:
+            cloudLLMCommonFields
+            Text("No API key required. Make sure Ollama is running locally.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .lmStudio:
+            cloudLLMCommonFields
+            Text("No API key required. Make sure LM Studio server is running locally.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         case .customOpenAICompatible:
             cloudLLMCommonFields
             TextField("Custom LLM Provider Name", text: credentialBinding(\.llmCustomProviderName))

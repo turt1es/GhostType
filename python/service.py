@@ -1000,13 +1000,30 @@ class ResidentModelRuntime:
         if isinstance(exc, ASRRequestError):
             raise exc
         if isinstance(exc, FileNotFoundError):
+            # Check whether the missing file looks like a model file (config.json, *.safetensors, etc.)
+            # vs. a missing ffmpeg executable.
+            err_str = str(exc)
+            is_model_file = (
+                "huggingface" in err_str
+                or "config.json" in err_str
+                or ".safetensors" in err_str
+                or ".gguf" in err_str
+            )
+            if is_model_file:
+                raise ASRRequestError(
+                    error_code="asr_model_not_found",
+                    human_message=(
+                        "ASR 模型文件缺失，请在设置中重新下载对应模型后重试。"
+                    ),
+                    technical_message=err_str,
+                ) from exc
             raise ASRRequestError(
                 error_code="asr_ffmpeg_not_found",
                 human_message=(
                     "本地 ASR 需要 ffmpeg 解码当前音频，但未找到可执行文件。"
                     "请开启内置 ffmpeg 选项或安装系统 ffmpeg。"
                 ),
-                technical_message=str(exc),
+                technical_message=err_str,
             ) from exc
         if isinstance(exc, subprocess.CalledProcessError):
             raise ASRRequestError(
@@ -1043,7 +1060,17 @@ class ResidentModelRuntime:
     def _apply_model_overrides(self, asr_model: str | None, llm_model: str | None) -> None:
         changed_llm = False
         if asr_model and asr_model != self.asr_model_id:
-            self.asr_model_id = asr_model
+            # Only switch ASR model if it is actually cached locally; otherwise keep
+            # the currently-loaded model to avoid FileNotFoundError at transcription time.
+            cache_dir = Path.home() / ".cache" / "huggingface" / "hub" / f"models--{asr_model.replace('/', '--')}"
+            if cache_dir.exists():
+                self.asr_model_id = asr_model
+            else:
+                print(
+                    f"[model-override] ASR model '{asr_model}' not in local cache; "
+                    f"keeping current model '{self.asr_model_id}'.",
+                    flush=True,
+                )
         if llm_model and llm_model != self.llm_model_id:
             self.llm_model_id = llm_model
             changed_llm = True
@@ -2957,6 +2984,20 @@ def create_app(runtime: ResidentModelRuntime) -> FastAPI:
             },
         )
 
+    @app.post("/local_llm/delete")
+    def delete_local_llm(body: dict[str, Any]) -> dict[str, Any]:
+        """Delete a locally cached HuggingFace model by repo_id."""
+        repo_id = body.get("repo_id", "").strip()
+        if not repo_id:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="repo_id is required")
+        cache_dir = Path.home() / ".cache" / "huggingface" / "hub" / f"models--{repo_id.replace('/', '--')}"
+        if not cache_dir.exists():
+            return {"ok": True, "message": f"Cache not found for {repo_id}, nothing to delete."}
+        import shutil
+        shutil.rmtree(cache_dir)
+        return {"ok": True, "message": f"Deleted cache for {repo_id}"}
+
     return app
 
 
@@ -2966,6 +3007,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--state-dir", default=str(Path(__file__).parent / "state"))
     parser.add_argument("--asr-model", default=DEFAULT_ASR_MODEL)
+    parser.add_argument("--asr-provider", default="mlx_whisper")
     parser.add_argument("--llm-model", default=DEFAULT_LLM_MODEL)
     parser.add_argument("--idle-timeout", type=int, default=300)
     return parser.parse_args()

@@ -51,6 +51,10 @@ extension InferenceCoordinator {
             return "Custom OpenAI-Compatible API"
         case .openAI:
             return "OpenAI ChatCompletions"
+        case .ollama:
+            return "Ollama OpenAI-Compatible API"
+        case .lmStudio:
+            return "LM Studio OpenAI-Compatible API"
         case .localMLX:
             return "Cloud ChatCompletions"
         }
@@ -97,6 +101,8 @@ extension InferenceCoordinator {
             return .llmDeepSeek
         case .groq:
             return .llmGroq
+        case .ollama, .lmStudio:
+            return nil
         }
     }
 
