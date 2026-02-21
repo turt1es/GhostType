@@ -22,24 +22,53 @@ struct GeneralSettingsPane: View {
         ) {
             Form {
                 Section(prefs.ui("运行状态", "Runtime Status")) {
-                    LabeledContent("Stage", value: runtime.stage.title)
+                    LabeledContent(prefs.ui("阶段", "Stage"), value: runtime.stage.title)
                     LabeledContent(
-                        "Provider",
-                        value: engine.shouldUseLocalProvider
-                            ? "Local MLX"
-                            : (engine.isMixedEngineSelection ? "Hybrid (Local + Cloud)" : "Cloud API")
+                        prefs.ui("提供者", "Provider"),
+                        value: {
+                            // 检查ASR和LLM引擎的组合状态
+                            let isASRLocal = engine.requiresLocalASR
+                            let isLLMLocal = engine.requiresLocalLLM
+                            
+                            if isASRLocal && isLLMLocal {
+                                return prefs.ui("本地 MLX", "Local MLX")
+                            } else if !isASRLocal && !isLLMLocal {
+                                return prefs.ui("云端 API", "Cloud API")
+                            } else {
+                                // 混合状态：ASR和LLM一个本地一个云端
+                                return prefs.ui("混合 (本地+云端)", "Hybrid (Local + Cloud)")
+                            }
+                        }()
                     )
-                    LabeledContent("Backend", value: runtime.backendStatus)
-                    LabeledContent("Process", value: runtime.processStatus)
-                    LabeledContent("Mode", value: runtime.activeModeText)
-                    LabeledContent("ASR Detected", value: runtime.lastASRDetectedLanguage)
-                    LabeledContent("LLM Language Policy", value: runtime.lastLLMOutputLanguagePolicy)
-                    LabeledContent("Pretranscribe", value: runtime.pretranscribeStatus)
-                    LabeledContent("Pretranscribed Chunks", value: "\(runtime.pretranscribeCompletedChunks)")
-                    LabeledContent("Pretranscribe Queue", value: "\(runtime.pretranscribeQueueDepth)")
-                    LabeledContent("Last Chunk Latency", value: runtime.pretranscribeLastLatencyMS > 0 ? String(format: "%.0f ms", runtime.pretranscribeLastLatencyMS) : "N/A")
-                    LabeledContent("Insert Path", value: runtime.lastInsertPath)
-                    LabeledContent("Clipboard Restore", value: runtime.lastClipboardRestoreStatus)
+                    LabeledContent(
+                        prefs.ui("ASR 提供者", "ASR Provider"),
+                        value: {
+                            // 检查是否使用本地MLX引擎（包括Qwen3 ASR）
+                            if engine.requiresLocalASR {
+                                // 检查是否是Qwen3 ASR
+                                if engine.localASRProvider == .mlxQwen3ASR {
+                                    return prefs.ui("本地 MLX (Qwen3)", "Local MLX (Qwen3)")
+                                } else if engine.localASRProvider == .mlxWhisper {
+                                    return prefs.ui("本地 MLX (Whisper)", "Local MLX (Whisper)")
+                                } else {
+                                    return prefs.ui("本地 MLX", "Local MLX")
+                                }
+                            } else {
+                                return prefs.ui("云端 API", "Cloud API")
+                            }
+                        }()
+                    )
+                    LabeledContent(prefs.ui("后端", "Backend"), value: runtime.backendStatus)
+                    LabeledContent(prefs.ui("进程", "Process"), value: runtime.processStatus)
+                    LabeledContent(prefs.ui("模式", "Mode"), value: runtime.activeModeText)
+                    LabeledContent(prefs.ui("ASR 检测语言", "ASR Detected"), value: runtime.lastASRDetectedLanguage)
+                    LabeledContent(prefs.ui("LLM 语言策略", "LLM Language Policy"), value: runtime.lastLLMOutputLanguagePolicy)
+                    LabeledContent(prefs.ui("预转写", "Pretranscribe"), value: runtime.pretranscribeStatus)
+                    LabeledContent(prefs.ui("已转写分块", "Pretranscribed Chunks"), value: "\(runtime.pretranscribeCompletedChunks)")
+                    LabeledContent(prefs.ui("预转写队列", "Pretranscribe Queue"), value: "\(runtime.pretranscribeQueueDepth)")
+                    LabeledContent(prefs.ui("最后分块延迟", "Last Chunk Latency"), value: runtime.pretranscribeLastLatencyMS > 0 ? String(format: "%.0f ms", runtime.pretranscribeLastLatencyMS) : "N/A")
+                    LabeledContent(prefs.ui("插入路径", "Insert Path"), value: runtime.lastInsertPath)
+                    LabeledContent(prefs.ui("剪贴板恢复", "Clipboard Restore"), value: runtime.lastClipboardRestoreStatus)
                     if !runtime.lastInsertDebug.isEmpty {
                         Text(runtime.lastInsertDebug)
                             .font(.caption)
@@ -67,6 +96,21 @@ struct GeneralSettingsPane: View {
                     .foregroundStyle(.secondary)
                 }
 
+                Section(prefs.ui("LLM 润色", "LLM Polish")) {
+                    Toggle(
+                        prefs.ui("启用 LLM 润色", "Enable LLM Polish"),
+                        isOn: $prefs.llmPolishEnabled
+                    )
+                    Text(
+                        prefs.ui(
+                            "开启后，ASR 转写结果会经过 LLM 润色处理；关闭则直接输出 ASR 原始结果。",
+                            "When enabled, ASR transcription will be polished by LLM; when disabled, raw ASR output is used directly."
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
                 Section(prefs.ui("长录音预转写", "Long Recording Pretranscribe")) {
                     Toggle(
                         prefs.ui("长录音预转写", "Long Recording Pretranscribe"),
@@ -85,7 +129,7 @@ struct GeneralSettingsPane: View {
                         isExpanded: $pretranscribeAdvancedExpanded,
                         content: {
                             HStack {
-                                Text("Step seconds")
+                                Text(prefs.ui("步进秒数", "Step seconds"))
                                 Spacer()
                                 TextField(
                                     "5.0",
@@ -95,7 +139,7 @@ struct GeneralSettingsPane: View {
                                 .frame(width: 90)
                             }
                             HStack {
-                                Text("Overlap seconds")
+                                Text(prefs.ui("重叠秒数", "Overlap seconds"))
                                 Spacer()
                                 TextField(
                                     "0.6",
@@ -105,7 +149,7 @@ struct GeneralSettingsPane: View {
                                 .frame(width: 90)
                             }
                             HStack {
-                                Text("Max chunk seconds")
+                                Text(prefs.ui("最大分块秒数", "Max chunk seconds"))
                                 Spacer()
                                 TextField(
                                     "10.0",
@@ -115,7 +159,7 @@ struct GeneralSettingsPane: View {
                                 .frame(width: 90)
                             }
                             HStack {
-                                Text("Min speech seconds")
+                                Text(prefs.ui("最小语音秒数", "Min speech seconds"))
                                 Spacer()
                                 TextField(
                                     "1.2",
@@ -125,7 +169,7 @@ struct GeneralSettingsPane: View {
                                 .frame(width: 90)
                             }
                             HStack {
-                                Text("End silence (ms)")
+                                Text(prefs.ui("结束静音 (ms)", "End silence (ms)"))
                                 Spacer()
                                 TextField(
                                     "240",
@@ -135,7 +179,7 @@ struct GeneralSettingsPane: View {
                                 .frame(width: 90)
                             }
                             HStack {
-                                Text("ASR requests in flight")
+                                Text(prefs.ui("并行 ASR 请求数", "ASR requests in flight"))
                                 Spacer()
                                 TextField(
                                     "1",
@@ -144,13 +188,13 @@ struct GeneralSettingsPane: View {
                                 )
                                 .frame(width: 90)
                             }
-                            Picker("Fallback", selection: $prefs.pretranscribeFallbackPolicy) {
-                                Text("Off").tag(PretranscribeFallbackPolicyOption.off)
-                                Text("Chunk failures -> full ASR").tag(PretranscribeFallbackPolicyOption.fullASROnHighFailure)
+                            Picker(prefs.ui("回退策略", "Fallback"), selection: $prefs.pretranscribeFallbackPolicy) {
+                                Text(prefs.ui("关闭", "Off")).tag(PretranscribeFallbackPolicyOption.off)
+                                Text(prefs.ui("分块失败后完整 ASR", "Chunk failures -> full ASR")).tag(PretranscribeFallbackPolicyOption.fullASROnHighFailure)
                             }
                         },
                         label: {
-                            Text("Advanced")
+                            Text(prefs.ui("高级设置", "Advanced"))
                         }
                     )
                 }
@@ -162,7 +206,7 @@ struct GeneralSettingsPane: View {
                 }
 
                 Section(prefs.ui("语言", "Language")) {
-                    Picker("UI Language", selection: $prefs.uiLanguage) {
+                    Picker(prefs.ui("界面语言", "UI Language"), selection: $prefs.uiLanguage) {
                         ForEach(UILanguageOption.allCases) { option in
                             Text(option.rawValue).tag(option)
                         }
@@ -180,7 +224,7 @@ struct GeneralSettingsPane: View {
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    Picker("Translate To", selection: $prefs.targetLanguage) {
+                    Picker(prefs.ui("翻译目标", "Translate To"), selection: $prefs.targetLanguage) {
                         ForEach(TargetLanguageOption.allCases) { option in
                             Text(option.rawValue).tag(option)
                         }
@@ -192,7 +236,7 @@ struct GeneralSettingsPane: View {
                 }
 
                 Section(prefs.ui("内存策略", "Memory Policy")) {
-                    Picker("Release Models After Idle", selection: $prefs.memoryTimeout) {
+                    Picker(prefs.ui("空闲后释放模型", "Release Models After Idle"), selection: $prefs.memoryTimeout) {
                         ForEach(MemoryTimeoutOption.allCases) { option in
                             Text(option.rawValue).tag(option)
                         }

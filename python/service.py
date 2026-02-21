@@ -35,6 +35,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from mlx_lm import load, stream_generate
 import mlx_whisper
+try:
+    import mlx_audio
+    from mlx_audio.stt import load as load_mlx_audio_model
+except ImportError:
+    mlx_audio = None
+    load_mlx_audio_model = None
+
 from pydantic import BaseModel, Field
 
 from audio_io import WavFormatError, load_wav_pcm16_mono
@@ -139,6 +146,10 @@ class DictateRequest(BaseModel):
     vad: dict[str, Any] = Field(default_factory=dict)
     system_prompt: str | None = None
     max_tokens: int = 350
+    # Qwen3 ASR specific options
+    qwen3_asr_use_system_prompt: bool = False
+    qwen3_asr_use_dictionary: bool = True
+    qwen3_asr_system_prompt: str | None = None
 
 
 class AskRequest(BaseModel):
@@ -167,6 +178,10 @@ class AskRequest(BaseModel):
     web_search_enabled: bool = True
     max_search_results: int = Field(default=3, ge=1, le=8)
     max_tokens: int = 350
+    # Qwen3 ASR specific options
+    qwen3_asr_use_system_prompt: bool = False
+    qwen3_asr_use_dictionary: bool = True
+    qwen3_asr_system_prompt: str | None = None
 
 
 class TranslateRequest(BaseModel):
@@ -191,6 +206,10 @@ class TranslateRequest(BaseModel):
     vad: dict[str, Any] = Field(default_factory=dict)
     system_prompt: str | None = None
     max_tokens: int = 350
+    # Qwen3 ASR specific options
+    qwen3_asr_use_system_prompt: bool = False
+    qwen3_asr_use_dictionary: bool = True
+    qwen3_asr_system_prompt: str | None = None
 
 
 class ASRChunkRequest(BaseModel):
@@ -212,6 +231,10 @@ class ASRChunkRequest(BaseModel):
     limiter: dict[str, Any] = Field(default_factory=dict)
     targets: dict[str, Any] = Field(default_factory=dict)
     vad: dict[str, Any] = Field(default_factory=dict)
+    # Qwen3 ASR specific options
+    qwen3_asr_use_system_prompt: bool = False
+    qwen3_asr_use_dictionary: bool = True
+    qwen3_asr_system_prompt: str | None = None
 
 
 class PreparedTranscriptRequest(BaseModel):
@@ -248,6 +271,14 @@ class InferenceResponse(BaseModel):
 class ASRChunkResponse(BaseModel):
     text: str
     timing_ms: dict[str, float]
+
+
+@dataclass
+class Qwen3ASRConfig:
+    """Configuration for Qwen3 ASR transcription."""
+    use_system_prompt: bool = False
+    use_dictionary: bool = True
+    system_prompt: str | None = None
 
 
 def utc_now_iso() -> str:
@@ -379,6 +410,8 @@ class ResidentModelRuntime:
         self.style_profile_path = self.state_dir / "style_profile.json"
 
         self._asr_module: Any | None = None
+        self._qwen3_asr_model: Any | None = None  # Cached Qwen3 ASR model
+        self._qwen3_asr_model_id: str | None = None  # Track model ID for cache invalidation
         self._llm_module: Any | None = None
         self._llm_model: Any | None = None
         self._llm_tokenizer: Any | None = None
@@ -891,9 +924,40 @@ class ResidentModelRuntime:
             f"{joined}."
         )
 
+    def _make_qwen3_dictionary_prompt(self) -> str:
+        """Generate a dictionary prompt specifically for Qwen3 ASR."""
+        dictionary_items = self.get_dictionary_items()
+        if not dictionary_items:
+            return ""
+        
+        # Format dictionary items as a clear mapping
+        mappings = []
+        for item in dictionary_items:
+            original = item.get("originalText", "")
+            corrected = item.get("correctedText", "")
+            if original and corrected:
+                mappings.append(f'"{original}" → "{corrected}"')
+        
+        if not mappings:
+            return ""
+        
+        return (
+            "Dictionary for proper nouns and technical terms (use these exact spellings):\n"
+            + "\n".join(f"- {m}" for m in mappings)
+        )
+
     def _ensure_asr_module(self) -> Any:
         if self._asr_module is None:
-            self._asr_module = mlx_whisper
+            # Check if using Qwen3 ASR model
+            if "qwen3-asr" in self.asr_model_id.lower() or "qwen3_asr" in self.asr_model_id.lower():
+                if mlx_audio is not None and load_mlx_audio_model is not None:
+                    self._asr_module = mlx_audio
+                else:
+                    # Fallback to mlx_whisper if mlx_audio is not available
+                    self._asr_module = mlx_whisper
+                    print("[WARNING] mlx_audio not available, falling back to mlx_whisper")
+            else:
+                self._asr_module = mlx_whisper
         return self._asr_module
 
     def _ensure_transcribe_ndarray_support(self, transcribe_func: Any) -> bool:
@@ -1096,6 +1160,8 @@ class ResidentModelRuntime:
         with self._lock:
             self._llm_model = None
             self._llm_tokenizer = None
+            self._qwen3_asr_model = None
+            self._qwen3_asr_model_id = None
             llm_model = None
             llm_tokenizer = None
             gc.collect()
@@ -1256,6 +1322,7 @@ class ResidentModelRuntime:
         audio_path: str,
         language: str = "auto",
         audio_config: AudioEnhancementConfig | None = None,
+        qwen3_config: Qwen3ASRConfig | None = None,
     ) -> ASRProcessingResult:
         asr_started_at = time.perf_counter()
         enhancement_result = AudioEnhancementResult(
@@ -1274,7 +1341,7 @@ class ResidentModelRuntime:
             chunks: list[str] = []
             first_packet_ms: float | None = None
             for index, path in enumerate(enhancement_result.transcribe_paths):
-                text = self._transcribe_audio_single(path, language=language)
+                text = self._transcribe_audio_single(path, language=language, qwen3_config=qwen3_config)
                 if index == 0:
                     first_packet_ms = (time.perf_counter() - asr_inference_started_at) * 1000.0
                 if text:
@@ -1325,51 +1392,114 @@ class ResidentModelRuntime:
                 except Exception:
                     continue
 
-    def _transcribe_audio_single(self, audio_path: str, language: str = "auto") -> str:
-        module = self._ensure_asr_module()
-        transcribe = module.transcribe
-        lang = None if language.lower() == "auto" else language
-        initial_prompt = self._make_asr_initial_prompt()
-        transcribe_input, requires_ffmpeg = self._prepare_transcribe_input(audio_path, transcribe)
-
-        attempts = [
-            {
-                "path_or_hf_repo": self.asr_model_id,
-                "language": lang,
-                "task": "transcribe",
-                "initial_prompt": initial_prompt,
-            },
-            {
-                "path_or_hf_repo": self.asr_model_id,
-                "language": lang,
-                "task": "transcribe",
-            },
-            {
-                "path_or_hf_repo": self.asr_model_id,
-                "language": lang,
-            },
-        ]
-
-        result: dict[str, Any] | None = None
-        for kwargs in attempts:
-            clean_kwargs = {k: v for k, v in kwargs.items() if v not in (None, "")}
+    def _transcribe_audio_single(self, audio_path: str, language: str = "auto", qwen3_config: Qwen3ASRConfig | None = None) -> str:
+        # Check if using Qwen3 ASR model
+        if "qwen3-asr" in self.asr_model_id.lower() or "qwen3_asr" in self.asr_model_id.lower():
+            # Use mlx_audio for Qwen3 ASR
+            if mlx_audio is None or load_mlx_audio_model is None:
+                raise ASRRequestError(
+                    error_code="qwen3_asr_unavailable",
+                    human_message="Qwen3 ASR 需要 mlx_audio 包，但当前未安装。",
+                    technical_message="mlx_audio not installed",
+                    status_code=500
+                )
+            
+            # Load or retrieve cached Qwen3 ASR model
+            if (self._qwen3_asr_model is None or 
+                self._qwen3_asr_model_id != self.asr_model_id):
+                print(f"[INFO] Loading Qwen3 ASR model: {self.asr_model_id}")
+                self._qwen3_asr_model = load_mlx_audio_model(self.asr_model_id)
+                self._qwen3_asr_model_id = self.asr_model_id
+                print(f"[INFO] Qwen3 ASR model loaded and cached")
+            
+            model = self._qwen3_asr_model
+            
+            # Build prompt for Qwen3 ASR if enabled
+            prompt_parts: list[str] = []
+            
+            # Add system prompt if enabled
+            if qwen3_config and qwen3_config.use_system_prompt:
+                if qwen3_config.system_prompt:
+                    prompt_parts.append(qwen3_config.system_prompt.strip())
+            
+            # Add dictionary terms if enabled
+            if qwen3_config is None or qwen3_config.use_dictionary:
+                dict_prompt = self._make_qwen3_dictionary_prompt()
+                if dict_prompt:
+                    prompt_parts.append(dict_prompt)
+            
+            # Combine prompts
+            combined_prompt = "\n\n".join(prompt_parts) if prompt_parts else None
+            
             try:
-                with self._ffmpeg_decode_environment(requires_ffmpeg):
-                    result = transcribe(transcribe_input, **clean_kwargs)
-                break
-            except TypeError:
-                continue
-            except (FileNotFoundError, subprocess.CalledProcessError, ValueError, ASRRequestError) as exc:
-                self._raise_transcribe_exception(exc)
+                # Call generate with prompt if available
+                if combined_prompt:
+                    result = model.generate(audio_path, prompt=combined_prompt)
+                else:
+                    result = model.generate(audio_path)
+                
+                # Extract text from result
+                if hasattr(result, 'text'):
+                    transcribed_text = str(result.text or "").strip()
+                elif isinstance(result, str):
+                    transcribed_text = result.strip()
+                else:
+                    transcribed_text = str(result).strip()
+                
+                return transcribed_text
+            except Exception as e:
+                raise ASRRequestError(
+                    error_code="qwen3_asr_transcribe_failed",
+                    human_message=f"Qwen3 ASR 转录失败: {str(e)}",
+                    technical_message=str(e),
+                    status_code=500
+                )
+        else:
+            # Use original mlx_whisper logic for other models
+            module = self._ensure_asr_module()
+            transcribe = module.transcribe
+            lang = None if language.lower() == "auto" else language
+            initial_prompt = self._make_asr_initial_prompt()
+            transcribe_input, requires_ffmpeg = self._prepare_transcribe_input(audio_path, transcribe)
 
-        if result is None:
-            try:
-                with self._ffmpeg_decode_environment(requires_ffmpeg):
-                    result = transcribe(transcribe_input)
-            except (FileNotFoundError, subprocess.CalledProcessError, ValueError, ASRRequestError) as exc:
-                self._raise_transcribe_exception(exc)
+            attempts = [
+                {
+                    "path_or_hf_repo": self.asr_model_id,
+                    "language": lang,
+                    "task": "transcribe",
+                    "initial_prompt": initial_prompt,
+                },
+                {
+                    "path_or_hf_repo": self.asr_model_id,
+                    "language": lang,
+                    "task": "transcribe",
+                },
+                {
+                    "path_or_hf_repo": self.asr_model_id,
+                    "language": lang,
+                },
+            ]
 
-        return str((result or {}).get("text") or "").strip()
+            result: dict[str, Any] | None = None
+            for kwargs in attempts:
+                clean_kwargs = {k: v for k, v in kwargs.items() if v not in (None, "")}
+                try:
+                    with self._ffmpeg_decode_environment(requires_ffmpeg):
+                        result = transcribe(transcribe_input, **clean_kwargs)
+                    break
+                except TypeError:
+                    continue
+                except (FileNotFoundError, subprocess.CalledProcessError, ValueError, ASRRequestError) as exc:
+                    self._raise_transcribe_exception(exc)
+
+            if result is None:
+                try:
+                    with self._ffmpeg_decode_environment(requires_ffmpeg):
+                        result = transcribe(transcribe_input)
+                except (FileNotFoundError, subprocess.CalledProcessError, ValueError, ASRRequestError) as exc:
+                    self._raise_transcribe_exception(exc)
+
+            return str((result or {}).get("text") or "").strip()
 
     def _prepare_audio_for_transcription(
         self,
@@ -2315,6 +2445,11 @@ class ResidentModelRuntime:
         audio_path = normalize_audio_path(req.audio_path)
         max_tokens = self._clamp_max_tokens(req.max_tokens)
         audio_config = self._audio_config_from_request(req)
+        qwen3_config = Qwen3ASRConfig(
+            use_system_prompt=req.qwen3_asr_use_system_prompt,
+            use_dictionary=req.qwen3_asr_use_dictionary,
+            system_prompt=req.qwen3_asr_system_prompt,
+        )
         with self._inference_lock:
             with self._lock:
                 self._apply_model_overrides(req.asr_model, req.llm_model)
@@ -2323,6 +2458,7 @@ class ResidentModelRuntime:
                 audio_path,
                 language="auto",
                 audio_config=audio_config,
+                qwen3_config=qwen3_config,
             )
             raw_text = asr_result.text
             t_asr = asr_result.timing_ms.get("asr", 0.0)
@@ -2355,6 +2491,11 @@ class ResidentModelRuntime:
         audio_path = normalize_audio_path(req.audio_path)
         max_tokens = self._clamp_max_tokens(req.max_tokens)
         audio_config = self._audio_config_from_request(req)
+        qwen3_config = Qwen3ASRConfig(
+            use_system_prompt=req.qwen3_asr_use_system_prompt,
+            use_dictionary=req.qwen3_asr_use_dictionary,
+            system_prompt=req.qwen3_asr_system_prompt,
+        )
         with self._inference_lock:
             with self._lock:
                 self._apply_model_overrides(req.asr_model, req.llm_model)
@@ -2363,6 +2504,7 @@ class ResidentModelRuntime:
                 audio_path,
                 language="auto",
                 audio_config=audio_config,
+                qwen3_config=qwen3_config,
             )
             raw_text = asr_result.text
             t_asr = asr_result.timing_ms.get("asr", 0.0)
@@ -2395,6 +2537,11 @@ class ResidentModelRuntime:
         audio_path = normalize_audio_path(req.audio_path)
         max_tokens = self._clamp_max_tokens(req.max_tokens)
         audio_config = self._audio_config_from_request(req)
+        qwen3_config = Qwen3ASRConfig(
+            use_system_prompt=req.qwen3_asr_use_system_prompt,
+            use_dictionary=req.qwen3_asr_use_dictionary,
+            system_prompt=req.qwen3_asr_system_prompt,
+        )
         with self._inference_lock:
             with self._lock:
                 self._apply_model_overrides(req.asr_model, req.llm_model)
@@ -2403,6 +2550,7 @@ class ResidentModelRuntime:
                 audio_path,
                 language="auto",
                 audio_config=audio_config,
+                qwen3_config=qwen3_config,
             )
             question = asr_result.text
             t_asr = asr_result.timing_ms.get("asr", 0.0)
@@ -2442,6 +2590,11 @@ class ResidentModelRuntime:
         audio_path = normalize_audio_path(req.audio_path)
         max_tokens = self._clamp_max_tokens(req.max_tokens)
         audio_config = self._audio_config_from_request(req)
+        qwen3_config = Qwen3ASRConfig(
+            use_system_prompt=req.qwen3_asr_use_system_prompt,
+            use_dictionary=req.qwen3_asr_use_dictionary,
+            system_prompt=req.qwen3_asr_system_prompt,
+        )
         with self._inference_lock:
             with self._lock:
                 self._apply_model_overrides(req.asr_model, req.llm_model)
@@ -2450,6 +2603,7 @@ class ResidentModelRuntime:
                 audio_path,
                 language="auto",
                 audio_config=audio_config,
+                qwen3_config=qwen3_config,
             )
             question = asr_result.text
             t_asr = asr_result.timing_ms.get("asr", 0.0)
@@ -2489,6 +2643,11 @@ class ResidentModelRuntime:
         audio_path = normalize_audio_path(req.audio_path)
         max_tokens = self._clamp_max_tokens(req.max_tokens)
         audio_config = self._audio_config_from_request(req)
+        qwen3_config = Qwen3ASRConfig(
+            use_system_prompt=req.qwen3_asr_use_system_prompt,
+            use_dictionary=req.qwen3_asr_use_dictionary,
+            system_prompt=req.qwen3_asr_system_prompt,
+        )
         with self._inference_lock:
             with self._lock:
                 self._apply_model_overrides(req.asr_model, req.llm_model)
@@ -2497,6 +2656,7 @@ class ResidentModelRuntime:
                 audio_path,
                 language="auto",
                 audio_config=audio_config,
+                qwen3_config=qwen3_config,
             )
             raw_text = asr_result.text
             t_asr = asr_result.timing_ms.get("asr", 0.0)
@@ -2529,6 +2689,11 @@ class ResidentModelRuntime:
         audio_path = normalize_audio_path(req.audio_path)
         max_tokens = self._clamp_max_tokens(req.max_tokens)
         audio_config = self._audio_config_from_request(req)
+        qwen3_config = Qwen3ASRConfig(
+            use_system_prompt=req.qwen3_asr_use_system_prompt,
+            use_dictionary=req.qwen3_asr_use_dictionary,
+            system_prompt=req.qwen3_asr_system_prompt,
+        )
         with self._inference_lock:
             with self._lock:
                 self._apply_model_overrides(req.asr_model, req.llm_model)
@@ -2537,6 +2702,7 @@ class ResidentModelRuntime:
                 audio_path,
                 language="auto",
                 audio_config=audio_config,
+                qwen3_config=qwen3_config,
             )
             raw_text = asr_result.text
             t_asr = asr_result.timing_ms.get("asr", 0.0)
@@ -2568,6 +2734,11 @@ class ResidentModelRuntime:
     def run_asr_chunk(self, req: ASRChunkRequest) -> ASRChunkResponse:
         audio_path = normalize_audio_path(req.audio_path)
         audio_config = self._audio_config_from_request(req)
+        qwen3_config = Qwen3ASRConfig(
+            use_system_prompt=req.qwen3_asr_use_system_prompt,
+            use_dictionary=req.qwen3_asr_use_dictionary,
+            system_prompt=req.qwen3_asr_system_prompt,
+        )
         with self._inference_lock:
             with self._lock:
                 self._apply_model_overrides(req.asr_model, req.llm_model)
@@ -2576,6 +2747,7 @@ class ResidentModelRuntime:
                 audio_path,
                 language="auto",
                 audio_config=audio_config,
+                qwen3_config=qwen3_config,
             )
         return ASRChunkResponse(
             text=asr_result.text,

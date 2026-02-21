@@ -85,7 +85,8 @@ extension InferenceCoordinator {
     }
 
     func lockedRoutePlan() -> InferenceRoutePlan {
-        let asrIsLocal = state.asrEngine == .localMLX
+        // Check if ASR is local by examining the provider's runtime kind
+        let asrIsLocal = state.asrEngine == .localMLX || state.localASRProvider.runtimeKind == .pythonInproc
         let llmIsLocal = state.llmEngine == .localMLX
         return InferenceRoutePlan(
             asrIsLocal: asrIsLocal,
@@ -148,7 +149,7 @@ extension InferenceCoordinator {
                 self.state.stage = .failed
                 self.state.processStatus = "Failed"
                 self.state.lastError = "Backend startup failed: \(error.localizedDescription)"
-                self.hudPanel.showError(message: "Backend Error")
+                self.hudPanel.showError(message: self.state.ui("后端错误", "Backend Error"))
                 self.hudPanel.hide(after: 1.0)
                 self.finishInferenceContext(inferenceID: inferenceID, audioURL: audioURL)
                 self.clearWorkflowState(for: recordingSessionID, clearTargetApplication: false)

@@ -31,12 +31,13 @@ enum LocalASRProviderOption: String, CaseIterable, Identifiable, Codable {
     case whisperCpp = "whisper.cpp"
     case fireRedASRExperimental = "FireRedASR (Experimental)"
     case localHTTPOpenAIAudio = "Local HTTP (OpenAI Audio API compatible)"
+    case mlxQwen3ASR = "MLX Audio (Qwen3 ASR)"
 
     var id: String { rawValue }
 
     var runtimeKind: LocalASRProviderRuntimeKind {
         switch self {
-        case .mlxWhisper:
+        case .mlxWhisper, .mlxQwen3ASR:
             return .pythonInproc
         case .whisperCpp:
             return .localBinary
@@ -49,14 +50,14 @@ enum LocalASRProviderOption: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .mlxWhisper, .weNet, .whisperCpp:
             return true
-        case .funASRParaformer, .senseVoice, .whisperKitLocalServer, .fireRedASRExperimental, .localHTTPOpenAIAudio:
+        case .funASRParaformer, .senseVoice, .whisperKitLocalServer, .fireRedASRExperimental, .localHTTPOpenAIAudio, .mlxQwen3ASR:
             return false
         }
     }
 
     var supportsStreaming: Bool {
         switch self {
-        case .funASRParaformer, .senseVoice, .whisperKitLocalServer, .weNet:
+        case .funASRParaformer, .senseVoice, .whisperKitLocalServer, .weNet, .mlxQwen3ASR:
             return true
         case .mlxWhisper, .whisperCpp, .fireRedASRExperimental, .localHTTPOpenAIAudio:
             return false
@@ -90,6 +91,8 @@ enum LocalASRProviderOption: String, CaseIterable, Identifiable, Codable {
             return "FireRedTeam/FireRedASR-AED-L"
         case .localHTTPOpenAIAudio:
             return LocalASRModelCatalog.defaultLocalHTTPModelName
+        case .mlxQwen3ASR:
+            return "mlx-community/Qwen3-ASR-0.6B-4bit"
         }
     }
 
@@ -111,12 +114,14 @@ enum LocalASRProviderOption: String, CaseIterable, Identifiable, Codable {
             return "Experimental provider. Connect through a local compatible service."
         case .localHTTPOpenAIAudio:
             return "Generic local HTTP ASR endpoint compatible with OpenAI Audio API."
+        case .mlxQwen3ASR:
+            return "Qwen3 ASR model running via MLX Audio library with streaming support."
         }
     }
 
     var asrEngine: ASREngineOption {
         switch self {
-        case .mlxWhisper:
+        case .mlxWhisper, .mlxQwen3ASR:
             return .localMLX
         case .funASRParaformer, .senseVoice, .weNet, .whisperKitLocalServer, .whisperCpp, .fireRedASRExperimental, .localHTTPOpenAIAudio:
             return .localHTTPOpenAIAudio
@@ -342,8 +347,51 @@ enum LocalASRModelCatalog {
         "mlx-community/whisper-large-v2-mlx-fp32",
     ]
 
+    private static let qwen3ASRRepoList: [String] = [
+        "mlx-community/Qwen3-ASR-0.6B-4bit",
+        "mlx-community/Qwen3-ASR-0.6B-8bit",
+        "mlx-community/Qwen3-ASR-1.7B-4bit",
+        "mlx-community/Qwen3-ASR-1.7B-8bit",
+    ]
+
+    private static func qwen3ASRDescriptor(fromHFRepo repo: String) -> LocalASRModelDescriptor? {
+        let normalizedRepo = repo.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedRepo.hasPrefix("mlx-community/Qwen3-ASR-") else {
+            return nil
+        }
+
+        let name = normalizedRepo.replacingOccurrences(of: "mlx-community/", with: "")
+        
+        var size = "0.6B"
+        var precision: LocalASRModelPrecision = .default
+        
+        if name.contains("1.7B") {
+            size = "1.7B"
+        }
+        
+        if name.hasSuffix("-4bit") {
+            precision = .bit4
+        } else if name.hasSuffix("-8bit") {
+            precision = .bit8
+        }
+
+        let displayName = "Qwen3 ASR \(size) · \(precision.displayName)"
+
+        return LocalASRModelDescriptor(
+            id: normalizedRepo,
+            displayName: displayName,
+            hfRepo: normalizedRepo,
+            family: .small, // Use small as placeholder since Qwen3 ASR has different sizing
+            variant: .multilingual,
+            precision: precision,
+            isAdvanced: false,
+            estimatedDiskMB: nil,
+            estimatedRAMMB: nil
+        )
+    }
+
     static let builtInModels: [LocalASRModelDescriptor] = normalizeModels(
-        builtInRepoList.compactMap(descriptor(fromHFRepo:))
+        builtInRepoList.compactMap(descriptor(fromHFRepo:)) + qwen3ASRRepoList.compactMap(qwen3ASRDescriptor(fromHFRepo:))
     )
 
     static func normalizeModelID(_ rawValue: String?) -> String {

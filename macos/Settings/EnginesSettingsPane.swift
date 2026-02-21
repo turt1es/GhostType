@@ -325,9 +325,9 @@ struct EnginesSettingsPane: View {
 
     private var asrEngineSection: some View {
         Section(prefs.ui("ASR 引擎", "ASR Engine")) {
-            Picker("Runtime", selection: asrRuntimeSelectionBinding) {
-                Text("Local").tag(EngineRuntimeSelection.local)
-                Text("Cloud").tag(EngineRuntimeSelection.cloud)
+            Picker(prefs.ui("运行时", "Runtime"), selection: asrRuntimeSelectionBinding) {
+                Text(prefs.ui("本地", "Local")).tag(EngineRuntimeSelection.local)
+                Text(prefs.ui("云端", "Cloud")).tag(EngineRuntimeSelection.cloud)
             }
             .pickerStyle(.segmented)
             Text(
@@ -338,7 +338,7 @@ struct EnginesSettingsPane: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             if !isLocalASREngine {
-                Picker("Engine", selection: asrProviderSelectionBinding) {
+                Picker(prefs.ui("引擎", "Engine"), selection: asrProviderSelectionBinding) {
                     ForEach(availableCloudASRProviders) { option in
                         Text(asrProviderDisplayName(option)).tag(option.id)
                     }
@@ -358,49 +358,49 @@ struct EnginesSettingsPane: View {
             localASRConfigurationView
         case .openAIWhisper:
             cloudASRCommonFields
-            SecureField("OpenAI API Key", text: credentialBinding(\.asrOpenAIKey))
+            SecureField(prefs.ui("OpenAI API 密钥", "OpenAI API Key"), text: credentialBinding(\.asrOpenAIKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save OpenAI ASR Key") {
+            saveButton(label: prefs.ui("保存 OpenAI ASR 密钥", "Save OpenAI ASR Key")) {
                 saveKey(viewModel.credentialDrafts.asrOpenAIKey, for: .asrOpenAI, providerLabel: "OpenAI ASR")
             }
         case .deepgram:
             cloudASRCommonFields
-            SecureField("Deepgram API Key", text: credentialBinding(\.asrDeepgramKey))
+            SecureField(prefs.ui("Deepgram API 密钥", "Deepgram API Key"), text: credentialBinding(\.asrDeepgramKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save Deepgram ASR Key") {
+            saveButton(label: prefs.ui("保存 Deepgram ASR 密钥", "Save Deepgram ASR Key")) {
                 saveKey(viewModel.credentialDrafts.asrDeepgramKey, for: .asrDeepgram, providerLabel: "Deepgram ASR")
             }
         case .assemblyAI:
             cloudASRCommonFields
-            SecureField("AssemblyAI API Key", text: credentialBinding(\.asrAssemblyAIKey))
+            SecureField(prefs.ui("AssemblyAI API 密钥", "AssemblyAI API Key"), text: credentialBinding(\.asrAssemblyAIKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save AssemblyAI ASR Key") {
+            saveButton(label: prefs.ui("保存 AssemblyAI ASR 密钥", "Save AssemblyAI ASR Key")) {
                 saveKey(viewModel.credentialDrafts.asrAssemblyAIKey, for: .asrAssemblyAI, providerLabel: "AssemblyAI ASR")
             }
         case .groq:
             cloudASRCommonFields
-            SecureField("Groq API Key", text: credentialBinding(\.asrGroqKey))
+            SecureField(prefs.ui("Groq API 密钥", "Groq API Key"), text: credentialBinding(\.asrGroqKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save Groq ASR Key") {
+            saveButton(label: prefs.ui("保存 Groq ASR 密钥", "Save Groq ASR Key")) {
                 saveKey(viewModel.credentialDrafts.asrGroqKey, for: .asrGroq, providerLabel: "Groq ASR")
             }
         case .geminiMultimodal:
             cloudASRCommonFields
-            Text("Gemini ASR reuses the Gemini API key from LLM settings.")
+            Text(prefs.ui("Gemini ASR 复用 LLM 设置中的 Gemini API 密钥。", "Gemini ASR reuses the Gemini API key from LLM settings."))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            SecureField("Gemini API Key (Shared)", text: credentialBinding(\.llmGeminiKey))
+            SecureField(prefs.ui("Gemini API 密钥（共享）", "Gemini API Key (Shared)"), text: credentialBinding(\.llmGeminiKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save Shared Gemini Key") {
+            saveButton(label: prefs.ui("保存共享 Gemini 密钥", "Save Shared Gemini Key")) {
                 saveKey(viewModel.credentialDrafts.llmGeminiKey, for: .llmGemini, providerLabel: "Gemini (Shared)")
             }
         case .customOpenAICompatible:
             cloudASRCommonFields
-            TextField("Custom ASR Provider Name", text: credentialBinding(\.asrCustomProviderName))
+            TextField(prefs.ui("自定义 ASR 提供者名称", "Custom ASR Provider Name"), text: credentialBinding(\.asrCustomProviderName))
                 .textFieldStyle(.roundedBorder)
-            SecureField("Custom ASR API Key", text: credentialBinding(\.asrCustomProviderKey))
+            SecureField(prefs.ui("自定义 ASR API 密钥", "Custom ASR API Key"), text: credentialBinding(\.asrCustomProviderKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save Custom ASR Key") {
+            saveButton(label: prefs.ui("保存自定义 ASR 密钥", "Save Custom ASR Key")) {
                 saveKeyRef(
                     viewModel.credentialDrafts.asrCustomProviderKey,
                     keyRef: engine.cloudASRApiKeyRef,
@@ -408,7 +408,7 @@ struct EnginesSettingsPane: View {
                 )
             }
             HStack(spacing: 8) {
-                Button("Save As New ASR Provider") {
+                Button(prefs.ui("保存为新 ASR 提供者", "Save As New ASR Provider")) {
                     let fallback = "Custom ASR \(engine.customASRProviders.count + 1)"
                     _ = engine.saveCurrentASRAsCustomProvider(
                         named: viewModel.credentialDrafts.asrCustomProviderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -418,12 +418,12 @@ struct EnginesSettingsPane: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(!canSaveCustomASRProvider)
-                Button("Update Current ASR Provider") {
+                Button(prefs.ui("更新当前 ASR 提供者", "Update Current ASR Provider")) {
                     _ = engine.updateCurrentCustomASRProvider(named: viewModel.credentialDrafts.asrCustomProviderName)
                 }
                 .buttonStyle(.bordered)
                 .disabled(!isSelectedASRProviderCustom || !canSaveCustomASRProvider)
-                Button("Delete Current ASR Provider", role: .destructive) {
+                Button(prefs.ui("删除当前 ASR 提供者", "Delete Current ASR Provider"), role: .destructive) {
                     _ = engine.deleteCurrentCustomASRProvider()
                 }
                 .buttonStyle(.bordered)
@@ -443,7 +443,7 @@ struct EnginesSettingsPane: View {
 
     @ViewBuilder
     private var localASRConfigurationView: some View {
-        Picker("Provider", selection: $engine.localASRProvider) {
+        Picker(prefs.ui("提供者", "Provider"), selection: $engine.localASRProvider) {
             ForEach(LocalASRProviderOption.allCases) { option in
                 Text(option.rawValue).tag(option)
             }
@@ -455,15 +455,15 @@ struct EnginesSettingsPane: View {
             let selectedDescriptor = engine.localASRModelDescriptor()
             
             // MARK: - Active Configuration Section
-            Text("Active Configuration")
+            Text(prefs.ui("当前配置", "Active Configuration"))
                 .font(.headline.weight(.semibold))
             
             if localInstalledASRModels.isEmpty {
-                Text("No installed models. Use Model Manager below to download.")
+                Text(prefs.ui("没有已安装的模型。请使用下方的模型管理器下载。", "No installed models. Use Model Manager below to download."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Picker("Select Model (installed only)", selection: $engine.selectedLocalASRModelID) {
+                Picker(prefs.ui("选择模型（仅已安装）", "Select Model (installed only)"), selection: $engine.selectedLocalASRModelID) {
                     ForEach(localInstalledASRModels) { descriptor in
                         Text(descriptor.displayName).tag(descriptor.id)
                     }
@@ -485,7 +485,7 @@ struct EnginesSettingsPane: View {
                 }
             } label: {
                 HStack {
-                    Text("Choose quantization:")
+                    Text(prefs.ui("选择量化：", "Choose quantization:"))
                     Text(selectedDescriptor.precisionLabel)
                     Spacer()
                     Image(systemName: "chevron.up.chevron.down")
@@ -500,15 +500,15 @@ struct EnginesSettingsPane: View {
                         Circle()
                             .fill(localWhisperStatusColor(for: selectedDescriptor))
                             .frame(width: 8, height: 8)
-                        Text("Status: \(localWhisperStatus(for: selectedDescriptor))")
+                        Text(prefs.ui("状态：", "Status:") + " \(localWhisperStatus(for: selectedDescriptor))")
                             .font(.caption)
                     }
-                    Text("Repo: \(selectedDescriptor.hfRepo)")
+                    Text(prefs.ui("仓库：", "Repo:") + " \(selectedDescriptor.hfRepo)")
                         .font(.caption)
                         .textSelection(.enabled)
-                    Text("Variant: \(selectedDescriptor.variantLabel)")
+                    Text(prefs.ui("变体：", "Variant:") + " \(selectedDescriptor.variantLabel)")
                         .font(.caption)
-                    Text("Precision: \(selectedDescriptor.precisionLabel)")
+                    Text(prefs.ui("精度：", "Precision:") + " \(selectedDescriptor.precisionLabel)")
                         .font(.caption)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -517,26 +517,26 @@ struct EnginesSettingsPane: View {
             
             
             // MARK: - Model Manager Section
-            Text("Model Manager")
+            Text(prefs.ui("模型管理器", "Model Manager"))
                 .font(.headline.weight(.semibold))
             
-            TextField("Search Local Whisper Models", text: $viewModel.localASRModelSearch)
+            TextField(prefs.ui("搜索本地 Whisper 模型", "Search Local Whisper Models"), text: $viewModel.localASRModelSearch)
                 .textFieldStyle(.roundedBorder)
             
             HStack {
-                Button("Refresh List") {
+                Button(prefs.ui("刷新列表", "Refresh List")) {
                     viewModel.localASRModelSearch = ""
                 }
                 .buttonStyle(.bordered)
                 
                 Spacer()
                 
-                Toggle("Show advanced models (.en / fp32)", isOn: $engine.localASRShowAdvancedModels)
+                Toggle(prefs.ui("显示高级模型（.en / fp32）", "Show advanced models (.en / fp32)"), isOn: $engine.localASRShowAdvancedModels)
                     .toggleStyle(.checkbox)
             }
             
             // Download New Model - separate from active model selection
-            Picker("Download New Model", selection: $viewModel.pendingDownloadASRModelID) {
+            Picker(prefs.ui("下载新模型", "Download New Model"), selection: $viewModel.pendingDownloadASRModelID) {
                 ForEach(downloadableLocalASRModels) { descriptor in
                     HStack {
                         Text(descriptor.displayName)
@@ -575,7 +575,7 @@ struct EnginesSettingsPane: View {
                         if viewModel.downloadProgress.status == "verifying" {
                             ProgressView()
                                 .scaleEffect(0.7)
-                            Text("Verifying files...")
+                            Text(prefs.ui("正在验证文件...", "Verifying files..."))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else if viewModel.downloadProgress.isDownloading {
@@ -588,20 +588,20 @@ struct EnginesSettingsPane: View {
                                 ProgressView()
                                     .scaleEffect(0.7)
                             }
-                            Text(viewModel.downloadProgress.currentFile.isEmpty ? "Downloading..." : viewModel.downloadProgress.currentFile)
+                            Text(viewModel.downloadProgress.currentFile.isEmpty ? prefs.ui("正在下载...", "Downloading...") : viewModel.downloadProgress.currentFile)
                                 .font(.caption)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         } else if viewModel.downloadProgress.isComplete {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
-                            Text("Download complete!")
+                            Text(prefs.ui("下载完成！", "Download complete!"))
                                 .font(.caption)
                                 .foregroundStyle(.green)
                         } else if viewModel.downloadProgress.isFailed {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.red)
-                            Text(viewModel.downloadProgress.errorMessage.isEmpty ? "Download failed" : viewModel.downloadProgress.errorMessage)
+                            Text(viewModel.downloadProgress.errorMessage.isEmpty ? prefs.ui("下载失败", "Download failed") : viewModel.downloadProgress.errorMessage)
                                 .font(.caption)
                                 .foregroundStyle(.red)
                         }
@@ -614,14 +614,14 @@ struct EnginesSettingsPane: View {
                                 // Verifying - indeterminate
                                 ProgressView()
                                     .progressViewStyle(.linear)
-                                Text("Verifying integrity...")
+                                Text(prefs.ui("正在验证完整性...", "Verifying integrity..."))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             } else if viewModel.downloadProgress.downloadedBytes == 0 {
                                 // No data yet - indeterminate progress bar
                                 ProgressView()
                                     .progressViewStyle(.linear)
-                                Text("Connecting to Hugging Face...")
+                                Text(prefs.ui("正在连接 Hugging Face...", "Connecting to Hugging Face..."))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             } else {
@@ -654,14 +654,14 @@ struct EnginesSettingsPane: View {
             }
             
             // Local Cache List
-            Text("Local Cache:")
+            Text(prefs.ui("本地缓存：", "Local Cache:"))
                 .font(.headline.weight(.semibold))
             
             ForEach(localInstalledASRModels, id: \.id) { descriptor in
                 HStack {
                     Text(descriptor.displayName)
                     Spacer()
-                    Button("Delete") {
+                    Button(prefs.ui("删除", "Delete")) {
                         Task {
                             engine.selectedLocalASRModelID = descriptor.id
                             await clearSelectedLocalASRModelCache()
@@ -674,13 +674,13 @@ struct EnginesSettingsPane: View {
             
             // Cache Actions
             HStack(spacing: 8) {
-                Button("Reveal Cache in Finder") {
+                Button(prefs.ui("在 Finder 中显示缓存", "Reveal Cache in Finder")) {
                     revealSelectedLocalASRModelCacheInFinder()
                 }
                 .buttonStyle(.bordered)
                 .disabled(viewModel.probes.isDownloadingLocalASRModel || viewModel.probes.isClearingLocalASRModelCache)
                 
-                Button("Clear Model Cache") {
+                Button(prefs.ui("清除模型缓存", "Clear Model Cache")) {
                     Task {
                         await clearSelectedLocalASRModelCache()
                     }
@@ -691,8 +691,8 @@ struct EnginesSettingsPane: View {
             
             Button(
                 engine.isRefreshingLocalASRModelCatalog
-                    ? "Refreshing..."
-                    : "Refresh Catalog (Hugging Face)"
+                    ? prefs.ui("正在刷新...", "Refreshing...")
+                    : prefs.ui("刷新模型目录 (Hugging Face)", "Refresh Catalog (Hugging Face)")
             ) {
                 Task {
                     await engine.refreshLocalASRModelCatalog()
@@ -705,6 +705,241 @@ struct EnginesSettingsPane: View {
                 Text(engine.localASRModelCatalogStatus)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        case .mlxQwen3ASR:
+            let selectedDescriptor = qwen3ASRDescriptor()
+            
+            // MARK: - Active Configuration Section
+            Text(prefs.ui("当前配置", "Active Configuration"))
+                .font(.headline.weight(.semibold))
+            
+            if localInstalledQwen3ASRModels.isEmpty {
+                Text(prefs.ui("没有已安装的 Qwen3 ASR 模型。请使用下方的模型管理器下载。", "No installed Qwen3 ASR models. Use Model Manager below to download."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker(prefs.ui("选择模型（仅已安装）", "Select Model (installed only)"), selection: $engine.selectedLocalASRModelID) {
+                    ForEach(localInstalledQwen3ASRModels) { descriptor in
+                        Text(descriptor.displayName).tag(descriptor.id)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+            
+            // Status Box
+            GroupBox {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Circle()
+                            .fill(qwen3ASRStatusColor(for: selectedDescriptor))
+                            .frame(width: 8, height: 8)
+                        Text(prefs.ui("状态：", "Status:") + " \(qwen3ASRStatus(for: selectedDescriptor))")
+                            .font(.caption)
+                    }
+                    Text(prefs.ui("仓库：", "Repo:") + " \(selectedDescriptor.hfRepo)")
+                        .font(.caption)
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+            }
+            
+            // MARK: - Qwen3 ASR Options
+            Text(prefs.ui("转录选项", "Transcription Options"))
+                .font(.headline.weight(.semibold))
+            
+            // System prompt toggle
+            Toggle(
+                prefs.ui("使用系统提示词", "Use System Prompt"),
+                isOn: $engine.qwen3ASRUseSystemPrompt
+            )
+            
+            // System prompt editor (shown when enabled)
+            if engine.qwen3ASRUseSystemPrompt {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(prefs.ui("系统提示词", "System Prompt"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    TextEditor(text: $engine.qwen3ASRSystemPrompt)
+                        .font(.body)
+                        .frame(minHeight: 80, maxHeight: 150)
+                        .padding(4)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .cornerRadius(6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                        )
+                    
+                    Button(prefs.ui("恢复默认提示词", "Reset to Default")) {
+                        engine.qwen3ASRSystemPrompt = EngineConfig.defaultQwen3ASRSystemPrompt
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+                }
+            }
+            
+            // Dictionary optimization toggle
+            Toggle(
+                prefs.ui("使用词典优化", "Use Dictionary Optimization"),
+                isOn: $engine.qwen3ASRUseDictionary
+            )
+            Text(
+                prefs.ui(
+                    "启用后，转录时将应用个性化词典中的术语映射。",
+                    "When enabled, transcription will apply term mappings from the personalization dictionary."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            
+            // MARK: - Model Manager Section
+            Text(prefs.ui("模型管理器", "Model Manager"))
+                .font(.headline.weight(.semibold))
+            
+            // Download New Model
+            Picker(prefs.ui("下载新模型", "Download New Model"), selection: $viewModel.pendingDownloadASRModelID) {
+                ForEach(downloadableQwen3ASRModels) { descriptor in
+                    HStack {
+                        Text(descriptor.displayName)
+                        if hasLocalWhisperCache(for: descriptor.hfRepo) {
+                            Text("(installed)")
+                        }
+                    }.tag(descriptor.id)
+                }
+            }
+            .pickerStyle(.menu)
+            .onAppear {
+                if viewModel.pendingDownloadASRModelID.isEmpty || !downloadableQwen3ASRModels.contains(where: { $0.id == viewModel.pendingDownloadASRModelID }) {
+                    viewModel.pendingDownloadASRModelID = downloadableQwen3ASRModels.first?.id ?? ""
+                }
+            }
+            
+            HStack(spacing: 8) {
+                Button(
+                    viewModel.downloadProgress.isDownloading
+                        ? "Downloading..."
+                        : "Download Model"
+                ) {
+                    Task {
+                        await downloadPendingLocalASRModel()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.downloadProgress.isDownloading || viewModel.probes.isClearingLocalASRModelCache || viewModel.pendingDownloadASRModelID.isEmpty)
+            }
+            
+            // Download Progress UI
+            if viewModel.downloadProgress.isDownloading || viewModel.downloadProgress.status == "verifying" || viewModel.downloadProgress.isComplete || viewModel.downloadProgress.isFailed {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        if viewModel.downloadProgress.status == "verifying" {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                            Text(prefs.ui("正在验证文件...", "Verifying files..."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if viewModel.downloadProgress.isDownloading {
+                            if viewModel.downloadProgress.downloadedBytes > 0 {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .foregroundStyle(.blue)
+                            } else {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            }
+                            Text(viewModel.downloadProgress.currentFile.isEmpty ? prefs.ui("正在下载...", "Downloading...") : viewModel.downloadProgress.currentFile)
+                                .font(.caption)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else if viewModel.downloadProgress.isComplete {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text(prefs.ui("下载完成！", "Download complete!"))
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        } else if viewModel.downloadProgress.isFailed {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.red)
+                            Text(viewModel.downloadProgress.errorMessage.isEmpty ? prefs.ui("下载失败", "Download failed") : viewModel.downloadProgress.errorMessage)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    
+                    if viewModel.downloadProgress.isDownloading || viewModel.downloadProgress.status == "verifying" {
+                        VStack(alignment: .leading, spacing: 4) {
+                            if viewModel.downloadProgress.status == "verifying" {
+                                ProgressView()
+                                    .progressViewStyle(.linear)
+                                Text(prefs.ui("正在验证完整性...", "Verifying integrity..."))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            } else if viewModel.downloadProgress.downloadedBytes == 0 {
+                                ProgressView()
+                                    .progressViewStyle(.linear)
+                                Text(prefs.ui("正在连接 Hugging Face...", "Connecting to Hugging Face..."))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                FakeDownloadProgressView(downloadedBytes: viewModel.downloadProgress.downloadedBytes)
+                                HStack(spacing: 16) {
+                                    Text(viewModel.downloadProgress.formattedDownloadedSize)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    if viewModel.downloadProgress.speedMbps > 0 {
+                                        Text(viewModel.downloadProgress.formattedSpeed)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.secondary.opacity(0.15))
+                )
+            }
+            
+            // Local Cache List
+            Text(prefs.ui("本地缓存：", "Local Cache:"))
+                .font(.headline.weight(.semibold))
+            
+            ForEach(localInstalledQwen3ASRModels, id: \.id) { descriptor in
+                HStack {
+                    Text(descriptor.displayName)
+                    Spacer()
+                    Button(prefs.ui("删除", "Delete")) {
+                        Task {
+                            engine.selectedLocalASRModelID = descriptor.id
+                            await clearSelectedLocalASRModelCache()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.probes.isDownloadingLocalASRModel || viewModel.probes.isClearingLocalASRModelCache)
+                }
+            }
+            
+            // Cache Actions
+            HStack(spacing: 8) {
+                Button(prefs.ui("在 Finder 中显示缓存", "Reveal Cache in Finder")) {
+                    revealSelectedLocalASRModelCacheInFinder()
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.probes.isDownloadingLocalASRModel || viewModel.probes.isClearingLocalASRModelCache)
+                
+                Button(prefs.ui("清除模型缓存", "Clear Model Cache")) {
+                    Task {
+                        await clearSelectedLocalASRModelCache()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.probes.isDownloadingLocalASRModel || viewModel.probes.isClearingLocalASRModelCache)
             }
         case .funASRParaformer,
              .senseVoice,
@@ -741,6 +976,54 @@ struct EnginesSettingsPane: View {
     private var localInstalledASRModels: [LocalASRModelDescriptor] {
         engine.localASRModelDescriptors.filter { descriptor in
             hasLocalWhisperCache(for: descriptor.hfRepo)
+        }
+    }
+
+    // MARK: - Qwen3 ASR Helper Variables
+    private var qwen3ASRModels: [LocalASRModelDescriptor] {
+        engine.localASRModelDescriptors.filter { descriptor in
+            descriptor.hfRepo.lowercased().contains("qwen3-asr")
+        }
+    }
+
+    private var downloadableQwen3ASRModels: [LocalASRModelDescriptor] {
+        qwen3ASRModels
+    }
+
+    private var localInstalledQwen3ASRModels: [LocalASRModelDescriptor] {
+        qwen3ASRModels.filter { descriptor in
+            hasLocalWhisperCache(for: descriptor.hfRepo)
+        }
+    }
+
+    private func qwen3ASRDescriptor() -> LocalASRModelDescriptor {
+        if let descriptor = qwen3ASRModels.first(where: { $0.id == engine.selectedLocalASRModelID }) {
+            return descriptor
+        }
+        return qwen3ASRModels.first ?? LocalASRModelDescriptor(
+            id: "mlx-community/Qwen3-ASR-0.6B-4bit",
+            displayName: "Qwen3 ASR 0.6B · 4bit",
+            hfRepo: "mlx-community/Qwen3-ASR-0.6B-4bit",
+            family: .small,
+            variant: .multilingual,
+            precision: .bit4,
+            isAdvanced: false,
+            estimatedDiskMB: nil,
+            estimatedRAMMB: nil
+        )
+    }
+
+    private func qwen3ASRStatus(for descriptor: LocalASRModelDescriptor) -> String {
+        hasLocalWhisperCache(for: descriptor.hfRepo) ? "Ready" : "Not Downloaded"
+    }
+
+    private func qwen3ASRStatusColor(for descriptor: LocalASRModelDescriptor) -> Color {
+        let status = qwen3ASRStatus(for: descriptor)
+        switch status {
+        case "Ready":
+            return .green
+        default:
+            return .gray
         }
     }
 
@@ -1379,9 +1662,9 @@ struct EnginesSettingsPane: View {
 
     private var llmEngineSection: some View {
         Section(prefs.ui("LLM 引擎", "LLM Engine")) {
-            Picker("Runtime", selection: llmRuntimeSelectionBinding) {
-                Text("Local").tag(EngineRuntimeSelection.local)
-                Text("Cloud").tag(EngineRuntimeSelection.cloud)
+            Picker(prefs.ui("运行时", "Runtime"), selection: llmRuntimeSelectionBinding) {
+                Text(prefs.ui("本地", "Local")).tag(EngineRuntimeSelection.local)
+                Text(prefs.ui("云端", "Cloud")).tag(EngineRuntimeSelection.cloud)
             }
             .pickerStyle(.segmented)
             Text(
@@ -1392,7 +1675,7 @@ struct EnginesSettingsPane: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             if engine.llmEngine != .localMLX {
-                Picker("Engine", selection: llmProviderSelectionBinding) {
+                Picker(prefs.ui("引擎", "Engine"), selection: llmProviderSelectionBinding) {
                     ForEach(availableCloudLLMProviders) { option in
                         Text(llmProviderDisplayName(option)).tag(option.id)
                     }
@@ -1417,16 +1700,16 @@ struct EnginesSettingsPane: View {
             )
         case .openAI:
             cloudLLMCommonFields
-            SecureField("OpenAI API Key", text: credentialBinding(\.llmOpenAIKey))
+            SecureField(prefs.ui("OpenAI API 密钥", "OpenAI API Key"), text: credentialBinding(\.llmOpenAIKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save OpenAI LLM Key") {
+            saveButton(label: prefs.ui("保存 OpenAI LLM 密钥", "Save OpenAI LLM Key")) {
                 saveKey(viewModel.credentialDrafts.llmOpenAIKey, for: .llmOpenAI, providerLabel: "OpenAI LLM")
             }
         case .openAICompatible:
             cloudLLMCommonFields
-            SecureField("OpenAI-compatible API Key", text: credentialBinding(\.llmOpenAICompatibleKey))
+            SecureField(prefs.ui("OpenAI 兼容 API 密钥", "OpenAI-compatible API Key"), text: credentialBinding(\.llmOpenAICompatibleKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save OpenAI-Compatible LLM Key") {
+            saveButton(label: prefs.ui("保存 OpenAI 兼容 LLM 密钥", "Save OpenAI-Compatible LLM Key")) {
                 saveKey(
                     viewModel.credentialDrafts.llmOpenAICompatibleKey,
                     for: .llmOpenAICompatible,
@@ -1435,39 +1718,39 @@ struct EnginesSettingsPane: View {
             }
         case .azureOpenAI:
             cloudLLMCommonFields
-            TextField("API Version (e.g. 2024-02-01)", text: $engine.cloudLLMAPIVersion)
+            TextField(prefs.ui("API 版本（如 2024-02-01）", "API Version (e.g. 2024-02-01)"), text: $engine.cloudLLMAPIVersion)
                 .textFieldStyle(.roundedBorder)
-            SecureField("Azure OpenAI API Key", text: credentialBinding(\.llmAzureOpenAIKey))
+            SecureField(prefs.ui("Azure OpenAI API 密钥", "Azure OpenAI API Key"), text: credentialBinding(\.llmAzureOpenAIKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save Azure OpenAI Key") {
+            saveButton(label: prefs.ui("保存 Azure OpenAI 密钥", "Save Azure OpenAI Key")) {
                 saveKey(viewModel.credentialDrafts.llmAzureOpenAIKey, for: .llmAzureOpenAI, providerLabel: "Azure OpenAI LLM")
             }
         case .anthropic:
             cloudLLMCommonFields
-            SecureField("Anthropic API Key", text: credentialBinding(\.llmAnthropicKey))
+            SecureField(prefs.ui("Anthropic API 密钥", "Anthropic API Key"), text: credentialBinding(\.llmAnthropicKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save Anthropic LLM Key") {
+            saveButton(label: prefs.ui("保存 Anthropic LLM 密钥", "Save Anthropic LLM Key")) {
                 saveKey(viewModel.credentialDrafts.llmAnthropicKey, for: .llmAnthropic, providerLabel: "Anthropic LLM")
             }
         case .gemini:
             cloudLLMCommonFields
-            SecureField("Gemini API Key", text: credentialBinding(\.llmGeminiKey))
+            SecureField(prefs.ui("Gemini API 密钥", "Gemini API Key"), text: credentialBinding(\.llmGeminiKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save Gemini LLM Key") {
+            saveButton(label: prefs.ui("保存 Gemini LLM 密钥", "Save Gemini LLM Key")) {
                 saveKey(viewModel.credentialDrafts.llmGeminiKey, for: .llmGemini, providerLabel: "Gemini LLM")
             }
         case .deepSeek:
             cloudLLMCommonFields
-            SecureField("DeepSeek API Key", text: credentialBinding(\.llmDeepSeekKey))
+            SecureField(prefs.ui("DeepSeek API 密钥", "DeepSeek API Key"), text: credentialBinding(\.llmDeepSeekKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save DeepSeek LLM Key") {
+            saveButton(label: prefs.ui("保存 DeepSeek LLM 密钥", "Save DeepSeek LLM Key")) {
                 saveKey(viewModel.credentialDrafts.llmDeepSeekKey, for: .llmDeepSeek, providerLabel: "DeepSeek LLM")
             }
         case .groq:
             cloudLLMCommonFields
-            SecureField("Groq API Key", text: credentialBinding(\.llmGroqKey))
+            SecureField(prefs.ui("Groq API 密钥", "Groq API Key"), text: credentialBinding(\.llmGroqKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save Groq LLM Key") {
+            saveButton(label: prefs.ui("保存 Groq LLM 密钥", "Save Groq LLM Key")) {
                 saveKey(viewModel.credentialDrafts.llmGroqKey, for: .llmGroq, providerLabel: "Groq LLM")
             }
         case .ollama:
@@ -1482,11 +1765,11 @@ struct EnginesSettingsPane: View {
                 .foregroundStyle(.secondary)
         case .customOpenAICompatible:
             cloudLLMCommonFields
-            TextField("Custom LLM Provider Name", text: credentialBinding(\.llmCustomProviderName))
+            TextField(prefs.ui("自定义 LLM 提供者名称", "Custom LLM Provider Name"), text: credentialBinding(\.llmCustomProviderName))
                 .textFieldStyle(.roundedBorder)
-            SecureField("Custom LLM API Key", text: credentialBinding(\.llmCustomProviderKey))
+            SecureField(prefs.ui("自定义 LLM API 密钥", "Custom LLM API Key"), text: credentialBinding(\.llmCustomProviderKey))
                 .textFieldStyle(.roundedBorder)
-            saveButton(label: "Save Custom LLM Key") {
+            saveButton(label: prefs.ui("保存自定义 LLM 密钥", "Save Custom LLM Key")) {
                 saveKeyRef(
                     viewModel.credentialDrafts.llmCustomProviderKey,
                     keyRef: engine.cloudLLMApiKeyRef,
@@ -1494,7 +1777,7 @@ struct EnginesSettingsPane: View {
                 )
             }
             HStack(spacing: 8) {
-                Button("Save As New LLM Provider") {
+                Button(prefs.ui("保存为新 LLM 提供者", "Save As New LLM Provider")) {
                     let fallback = "Custom LLM \(engine.customLLMProviders.count + 1)"
                     _ = engine.saveCurrentLLMAsCustomProvider(
                         named: viewModel.credentialDrafts.llmCustomProviderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1504,12 +1787,12 @@ struct EnginesSettingsPane: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(!canSaveCustomLLMProvider)
-                Button("Update Current LLM Provider") {
+                Button(prefs.ui("更新当前 LLM 提供者", "Update Current LLM Provider")) {
                     _ = engine.updateCurrentCustomLLMProvider(named: viewModel.credentialDrafts.llmCustomProviderName)
                 }
                 .buttonStyle(.bordered)
                 .disabled(!isSelectedLLMProviderCustom || !canSaveCustomLLMProvider)
-                Button("Delete Current LLM Provider", role: .destructive) {
+                Button(prefs.ui("删除当前 LLM 提供者", "Delete Current LLM Provider"), role: .destructive) {
                     _ = engine.deleteCurrentCustomLLMProvider()
                 }
                 .buttonStyle(.bordered)

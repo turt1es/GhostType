@@ -129,7 +129,7 @@ extension InferenceCoordinator {
             state.lastError = "Missing credentials: \(names). Open Settings -> Engines & Models to configure."
             state.stage = .failed
             state.processStatus = "Failed"
-            hudPanel.showError(message: "Credentials Needed")
+            hudPanel.showError(message: state.ui("需要配置密钥", "Credentials Needed"))
             hudPanel.hide(after: 1.2)
             onOpenSettingsRequested?()
             appLogger.log(
@@ -209,7 +209,7 @@ extension InferenceCoordinator {
             state.stage = .failed
             state.processStatus = "Failed"
             state.lastError = "Inference routing failed: \(error.localizedDescription)"
-            hudPanel.showError(message: "Routing Error")
+            hudPanel.showError(message: state.ui("路由错误", "Routing Error"))
             hudPanel.hide(after: 1.0)
             removeTemporaryFileIfPresent(at: audioURL, context: "runInference.routingFailed")
             clearWorkflowState(for: recordingSessionID, clearTargetApplication: false)
@@ -237,6 +237,20 @@ extension InferenceCoordinator {
                 timeout: didReceiveFirstToken ? Timeouts.stallAfterToken : Timeouts.firstToken,
                 reason: "Inference timeout. Please try again."
             )
+        }
+
+        // Check if LLM polish is disabled for dictation mode
+        if !state.llmPolishEnabled, mode == .dictate {
+            runASROnlyInference(
+                mode: mode,
+                request: request,
+                routePlan: routePlan,
+                inferenceID: inferenceID,
+                audioURL: audioURL,
+                recordingSessionID: recordingSessionID,
+                pretranscribedResult: pretranscribedResult
+            )
+            return
         }
 
         let execute = { [weak self] in
@@ -400,7 +414,7 @@ extension InferenceCoordinator {
                         self.state.stage = .failed
                         self.state.processStatus = "Failed"
                         self.state.lastError = "Inference failed: \(error.localizedDescription)"
-                        self.hudPanel.showError(message: "Inference Error")
+                        self.hudPanel.showError(message: self.state.ui("推理错误", "Inference Error"))
                         self.hudPanel.hide(after: 1.0)
                         self.resultOverlay.hide(after: 0.2)
                         self.appLogger.log(
@@ -620,6 +634,191 @@ extension InferenceCoordinator {
         return try await cloud.transcribeAudio(request: request)
     }
 
+    private func runASROnlyInference(
+        mode: WorkflowMode,
+        request: InferenceRequest,
+        routePlan: InferenceRoutePlan,
+        inferenceID: UUID,
+        audioURL: URL,
+        recordingSessionID: UUID,
+        pretranscribedResult: PretranscriptionFinalResult?
+    ) {
+        appLogger.log(
+            "Running ASR-only inference (LLM polish disabled). sessionId=\(recordingSessionID.uuidString)"
+        )
+
+        // If we already have pretranscribed result, use it directly
+        if let pretranscribedResult, !pretranscribedResult.transcript.isEmpty {
+            let output = textPostProcessor.dedupe(
+                pretranscribedResult.transcript,
+                stage: "ASR",
+                sessionID: recordingSessionID
+            )
+            finalizeASROnlyOutput(
+                output: output,
+                detectedLanguage: pretranscribedResult.detectedLanguage,
+                timing: ["asr": pretranscribedResult.lastChunkLatencyMS, "total": pretranscribedResult.lastChunkLatencyMS],
+                inferenceID: inferenceID,
+                audioURL: audioURL,
+                recordingSessionID: recordingSessionID,
+                mode: mode
+            )
+            return
+        }
+
+        // Perform ASR based on route plan
+        Task {
+            do {
+                let asrStartedAt = Date()
+                let asrResult: ASRTranscriptionResult
+
+                if routePlan.isHybridRoute {
+                    // Hybrid route: use the appropriate ASR provider
+                    asrResult = try await transcribeForRoute(
+                        asrIsLocal: routePlan.asrIsLocal,
+                        request: request
+                    )
+                } else if routePlan.asrIsLocal {
+                    // Local-only route
+                    guard let local = localProvider as? PythonStreamRunner else {
+                        throw PythonRunError.invalidResponse("Local ASR runtime unavailable.")
+                    }
+                    let asr = try await local.transcribeChunk(
+                        state: request.state,
+                        audioURL: request.audioURL,
+                        dictationContext: request.dictationContext,
+                        audioProcessingProfile: request.audioProcessingProfile
+                    )
+                    asrResult = ASRTranscriptionResult(
+                        text: asr.text,
+                        detectedLanguage: asr.detectedLanguage
+                    )
+                } else {
+                    // Cloud-only route
+                    guard let cloud = cloudProvider as? CloudInferenceProvider else {
+                        throw CloudInferenceError.unsupportedASREngine
+                    }
+                    asrResult = try await cloud.transcribeAudio(request: request)
+                }
+
+                let asrElapsedMS = Date().timeIntervalSince(asrStartedAt) * 1000
+                let output = textPostProcessor.dedupe(
+                    asrResult.text,
+                    stage: "ASR",
+                    sessionID: recordingSessionID
+                )
+
+                await MainActor.run {
+                    self.finalizeASROnlyOutput(
+                        output: output,
+                        detectedLanguage: asrResult.detectedLanguage,
+                        timing: ["asr": asrElapsedMS, "total": asrElapsedMS],
+                        inferenceID: inferenceID,
+                        audioURL: audioURL,
+                        recordingSessionID: recordingSessionID,
+                        mode: mode
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    self.finishInferenceContext(inferenceID: inferenceID, audioURL: audioURL)
+                    self.clearWorkflowState(for: recordingSessionID, clearTargetApplication: true)
+
+                    if error is CancellationError {
+                        self.state.stage = .idle
+                        self.state.processStatus = "Idle"
+                        self.hudPanel.hide(after: 0.2)
+                        self.resultOverlay.hide(after: 0.1)
+                        self.appLogger.log(
+                            "ASR-only inference cancelled. sessionId=\(recordingSessionID.uuidString)"
+                        )
+                        return
+                    }
+
+                    self.state.stage = .failed
+                    self.state.processStatus = "Failed"
+                    self.state.lastError = "ASR failed: \(error.localizedDescription)"
+                    self.hudPanel.showError(message: self.state.ui("ASR 错误", "ASR Error"))
+                    self.hudPanel.hide(after: 1.0)
+                    self.resultOverlay.hide(after: 0.2)
+                    self.appLogger.log(
+                        "ASR-only inference failed. sessionId=\(recordingSessionID.uuidString): \(error.localizedDescription)",
+                        type: .error
+                    )
+                }
+            }
+        }
+    }
+
+    private func finalizeASROnlyOutput(
+        output: String,
+        detectedLanguage: String?,
+        timing: [String: Double],
+        inferenceID: UUID,
+        audioURL: URL,
+        recordingSessionID: UUID,
+        mode: WorkflowMode
+    ) {
+        guard activeInferenceID == inferenceID else { return }
+        guard activeInferenceSessionID == recordingSessionID else { return }
+
+        let fallbackPolicy = state.outputLanguageDirective(
+            asrDetectedLanguage: detectedLanguage,
+            transcriptText: output
+        ).policyLabel
+        state.lastASRDetectedLanguage = detectedLanguage ?? "Unknown"
+        state.lastLLMOutputLanguagePolicy = "ASR-only (\(fallbackPolicy))"
+
+        let finalOutput = textPostProcessor.process(
+            output,
+            request: InferenceRequest(
+                state: state,
+                mode: mode,
+                audioURL: audioURL,
+                selectedText: "",
+                dictationContext: nil,
+                audioProcessingProfile: .standard
+            ),
+            sessionID: recordingSessionID
+        )
+
+        state.streamingOutput = finalOutput
+        streamTextAccumulator.reset()
+        _ = streamTextAccumulator.ingest(finalOutput)
+        state.lastOutput = finalOutput
+        state.lastError = ""
+        state.stage = .completed
+        state.processStatus = "Idle"
+
+        hudPanel.showDone()
+        _ = copyAndPasteToFrontApp(finalOutput, sessionID: recordingSessionID)
+
+        if sessionTracker.registerHistoryInsert(sessionID: recordingSessionID) {
+            historyStore.insert(
+                mode: mode.title,
+                rawText: output,
+                outputText: finalOutput
+            )
+            appLogger.log(
+                "ASR-only history insert completed. sessionId=\(recordingSessionID.uuidString)"
+            )
+        }
+
+        resultOverlay.hide(after: 1.5)
+        hudPanel.hide(after: 1.5)
+        hudPanel.showInferenceTimingTelemetry(
+            timingHUDSummary(from: timing),
+            enabled: true
+        )
+
+        appLogger.log(
+            "ASR-only inference success. sessionId=\(recordingSessionID.uuidString) \(timingLogLine(from: timing))"
+        )
+
+        finishInferenceContext(inferenceID: inferenceID, audioURL: audioURL)
+        clearWorkflowState(for: recordingSessionID, clearTargetApplication: true)
+    }
+
     private func prepareDictationQualityPass(
         mode: WorkflowMode,
         provider: InferenceProvider,
@@ -837,7 +1036,7 @@ extension InferenceCoordinator {
             )
             if !outcome.success {
                 self.state.lastError = "Auto insert failed. Content remains in clipboard."
-                self.hudPanel.showError(message: "Copied")
+                self.hudPanel.showError(message: self.state.ui("已复制", "Copied"))
                 self.hudPanel.hide(after: 1.0)
                 self.appLogger.log(
                     "Output insertion failed. sessionId=\(sessionID.uuidString) path=\(outcome.path.rawValue) details=\(outcome.debugInfo)",
@@ -946,7 +1145,7 @@ extension InferenceCoordinator {
         if isRecording || isInferenceRunning {
             cancelCurrentOperation(
                 reason: "Cancelled by user.",
-                hudMessage: "Cancelled"
+                hudMessage: state.ui("已取消", "Cancelled")
             )
             return
         }
@@ -997,7 +1196,7 @@ extension InferenceCoordinator {
             guard let self else { return }
             guard self.activeInferenceID == firedInferenceID else { return }
             self.appLogger.log("Inference watchdog triggered: \(reason)", type: .error)
-            self.cancelCurrentOperation(reason: reason, hudMessage: "Timed Out")
+            self.cancelCurrentOperation(reason: reason, hudMessage: self.state.ui("超时", "Timed Out"))
         }
     }
 
