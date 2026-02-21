@@ -29,6 +29,12 @@ struct GeneralSettingsPane: View {
                             ? prefs.ui("本地 MLX", "Local MLX")
                             : (engine.isMixedEngineSelection ? prefs.ui("混合 (本地+云端)", "Hybrid (Local + Cloud)") : prefs.ui("云端 API", "Cloud API"))
                     )
+                    LabeledContent(
+                        prefs.ui("ASR 提供者", "ASR Provider"),
+                        value: engine.requiresLocalASR
+                            ? prefs.ui("本地 MLX", "Local MLX")
+                            : prefs.ui("云端 API", "Cloud API")
+                    )
                     LabeledContent(prefs.ui("后端", "Backend"), value: runtime.backendStatus)
                     LabeledContent(prefs.ui("进程", "Process"), value: runtime.processStatus)
                     LabeledContent(prefs.ui("模式", "Mode"), value: runtime.activeModeText)
@@ -61,6 +67,21 @@ struct GeneralSettingsPane: View {
                         prefs.ui(
                             "开启后会尝试通过辅助功能直接写入目标输入框；失败时自动复制并粘贴。恢复剪贴板会在检测到用户未改动时执行。",
                             "When enabled, GhostType tries direct AX insertion first and falls back to paste. Clipboard restore runs only if clipboard content has not changed."
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
+                Section(prefs.ui("LLM 润色", "LLM Polish")) {
+                    Toggle(
+                        prefs.ui("启用 LLM 润色", "Enable LLM Polish"),
+                        isOn: $prefs.llmPolishEnabled
+                    )
+                    Text(
+                        prefs.ui(
+                            "开启后，ASR 转写结果会经过 LLM 润色处理；关闭则直接输出 ASR 原始结果。",
+                            "When enabled, ASR transcription will be polished by LLM; when disabled, raw ASR output is used directly."
                         )
                     )
                     .font(.caption)

@@ -35,6 +35,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from mlx_lm import load, stream_generate
 import mlx_whisper
+try:
+    import mlx_audio
+    from mlx_audio.stt import load as load_mlx_audio_model
+except ImportError:
+    mlx_audio = None
+    load_mlx_audio_model = None
+
 from pydantic import BaseModel, Field
 
 from audio_io import WavFormatError, load_wav_pcm16_mono
@@ -379,6 +386,8 @@ class ResidentModelRuntime:
         self.style_profile_path = self.state_dir / "style_profile.json"
 
         self._asr_module: Any | None = None
+        self._qwen3_asr_model: Any | None = None  # Cached Qwen3 ASR model
+        self._qwen3_asr_model_id: str | None = None  # Track model ID for cache invalidation
         self._llm_module: Any | None = None
         self._llm_model: Any | None = None
         self._llm_tokenizer: Any | None = None
@@ -889,7 +898,16 @@ class ResidentModelRuntime:
 
     def _ensure_asr_module(self) -> Any:
         if self._asr_module is None:
-            self._asr_module = mlx_whisper
+            # Check if using Qwen3 ASR model
+            if "qwen3-asr" in self.asr_model_id.lower() or "qwen3_asr" in self.asr_model_id.lower():
+                if mlx_audio is not None and load_mlx_audio_model is not None:
+                    self._asr_module = mlx_audio
+                else:
+                    # Fallback to mlx_whisper if mlx_audio is not available
+                    self._asr_module = mlx_whisper
+                    print("[WARNING] mlx_audio not available, falling back to mlx_whisper")
+            else:
+                self._asr_module = mlx_whisper
         return self._asr_module
 
     def _ensure_transcribe_ndarray_support(self, transcribe_func: Any) -> bool:
@@ -1065,6 +1083,8 @@ class ResidentModelRuntime:
         with self._lock:
             self._llm_model = None
             self._llm_tokenizer = None
+            self._qwen3_asr_model = None
+            self._qwen3_asr_model_id = None
             llm_model = None
             llm_tokenizer = None
             gc.collect()
@@ -1295,50 +1315,93 @@ class ResidentModelRuntime:
                     continue
 
     def _transcribe_audio_single(self, audio_path: str, language: str = "auto") -> str:
-        module = self._ensure_asr_module()
-        transcribe = module.transcribe
-        lang = None if language.lower() == "auto" else language
-        initial_prompt = self._make_asr_initial_prompt()
-        transcribe_input, requires_ffmpeg = self._prepare_transcribe_input(audio_path, transcribe)
-
-        attempts = [
-            {
-                "path_or_hf_repo": self.asr_model_id,
-                "language": lang,
-                "task": "transcribe",
-                "initial_prompt": initial_prompt,
-            },
-            {
-                "path_or_hf_repo": self.asr_model_id,
-                "language": lang,
-                "task": "transcribe",
-            },
-            {
-                "path_or_hf_repo": self.asr_model_id,
-                "language": lang,
-            },
-        ]
-
-        result: dict[str, Any] | None = None
-        for kwargs in attempts:
-            clean_kwargs = {k: v for k, v in kwargs.items() if v not in (None, "")}
+        # Check if using Qwen3 ASR model
+        if "qwen3-asr" in self.asr_model_id.lower() or "qwen3_asr" in self.asr_model_id.lower():
+            # Use mlx_audio for Qwen3 ASR
+            if mlx_audio is None or load_mlx_audio_model is None:
+                raise ASRRequestError(
+                    error_code="qwen3_asr_unavailable",
+                    human_message="Qwen3 ASR 需要 mlx_audio 包，但当前未安装。",
+                    technical_message="mlx_audio not installed",
+                    status_code=500
+                )
+            
+            # Load or retrieve cached Qwen3 ASR model
+            if (self._qwen3_asr_model is None or 
+                self._qwen3_asr_model_id != self.asr_model_id):
+                print(f"[INFO] Loading Qwen3 ASR model: {self.asr_model_id}")
+                self._qwen3_asr_model = load_mlx_audio_model(self.asr_model_id)
+                self._qwen3_asr_model_id = self.asr_model_id
+                print(f"[INFO] Qwen3 ASR model loaded and cached")
+            
+            model = self._qwen3_asr_model
+            
             try:
-                with self._ffmpeg_decode_environment(requires_ffmpeg):
-                    result = transcribe(transcribe_input, **clean_kwargs)
-                break
-            except TypeError:
-                continue
-            except (FileNotFoundError, subprocess.CalledProcessError, ValueError, ASRRequestError) as exc:
-                self._raise_transcribe_exception(exc)
+                # Call generate - returns a result object with .text attribute
+                result = model.generate(audio_path)
+                
+                # Extract text from result
+                if hasattr(result, 'text'):
+                    transcribed_text = str(result.text or "").strip()
+                elif isinstance(result, str):
+                    transcribed_text = result.strip()
+                else:
+                    transcribed_text = str(result).strip()
+                
+                return transcribed_text
+            except Exception as e:
+                raise ASRRequestError(
+                    error_code="qwen3_asr_transcribe_failed",
+                    human_message=f"Qwen3 ASR 转录失败: {str(e)}",
+                    technical_message=str(e),
+                    status_code=500
+                )
+        else:
+            # Use original mlx_whisper logic for other models
+            module = self._ensure_asr_module()
+            transcribe = module.transcribe
+            lang = None if language.lower() == "auto" else language
+            initial_prompt = self._make_asr_initial_prompt()
+            transcribe_input, requires_ffmpeg = self._prepare_transcribe_input(audio_path, transcribe)
 
-        if result is None:
-            try:
-                with self._ffmpeg_decode_environment(requires_ffmpeg):
-                    result = transcribe(transcribe_input)
-            except (FileNotFoundError, subprocess.CalledProcessError, ValueError, ASRRequestError) as exc:
-                self._raise_transcribe_exception(exc)
+            attempts = [
+                {
+                    "path_or_hf_repo": self.asr_model_id,
+                    "language": lang,
+                    "task": "transcribe",
+                    "initial_prompt": initial_prompt,
+                },
+                {
+                    "path_or_hf_repo": self.asr_model_id,
+                    "language": lang,
+                    "task": "transcribe",
+                },
+                {
+                    "path_or_hf_repo": self.asr_model_id,
+                    "language": lang,
+                },
+            ]
 
-        return str((result or {}).get("text") or "").strip()
+            result: dict[str, Any] | None = None
+            for kwargs in attempts:
+                clean_kwargs = {k: v for k, v in kwargs.items() if v not in (None, "")}
+                try:
+                    with self._ffmpeg_decode_environment(requires_ffmpeg):
+                        result = transcribe(transcribe_input, **clean_kwargs)
+                    break
+                except TypeError:
+                    continue
+                except (FileNotFoundError, subprocess.CalledProcessError, ValueError, ASRRequestError) as exc:
+                    self._raise_transcribe_exception(exc)
+
+            if result is None:
+                try:
+                    with self._ffmpeg_decode_environment(requires_ffmpeg):
+                        result = transcribe(transcribe_input)
+                except (FileNotFoundError, subprocess.CalledProcessError, ValueError, ASRRequestError) as exc:
+                    self._raise_transcribe_exception(exc)
+
+            return str((result or {}).get("text") or "").strip()
 
     def _prepare_audio_for_transcription(
         self,

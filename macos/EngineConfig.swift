@@ -21,6 +21,7 @@ final class EngineConfig: ObservableObject {
         static let localASRWeNetModelType = "GhostType.localASRWeNetModelType"
         static let localASRWhisperCppBinaryPath = "GhostType.localASRWhisperCppBinaryPath"
         static let localASRWhisperCppModelPath = "GhostType.localASRWhisperCppModelPath"
+        static let qwen3ASRUsePrompt = "GhostType.qwen3ASRUsePrompt"
         static let cloudASRBaseURL = "GhostType.cloudASRBaseURL"
         static let cloudASRModelName = "GhostType.cloudASRModelName"
         static let cloudASRModelCatalog = "GhostType.cloudASRModelCatalog"
@@ -126,8 +127,8 @@ final class EngineConfig: ObservableObject {
                     localHTTPASRModelName = localASRProvider.defaultHTTPModelName
                 }
             }
-            if (asrEngine == .localMLX || asrEngine == .localHTTPOpenAIAudio),
-               asrEngine != localASRProvider.asrEngine {
+            // Always sync asrEngine to match localASRProvider.asrEngine
+            if asrEngine != localASRProvider.asrEngine {
                 asrEngine = localASRProvider.asrEngine
             } else {
                 notifyEngineConfigChanged()
@@ -210,6 +211,13 @@ final class EngineConfig: ObservableObject {
     @Published var localASRWhisperCppModelPath: String {
         didSet {
             defaults.set(localASRWhisperCppModelPath, forKey: Keys.localASRWhisperCppModelPath)
+            notifyEngineConfigChanged()
+        }
+    }
+
+    @Published var qwen3ASRUsePrompt: Bool {
+        didSet {
+            defaults.set(qwen3ASRUsePrompt, forKey: Keys.qwen3ASRUsePrompt)
             notifyEngineConfigChanged()
         }
     }
@@ -578,6 +586,7 @@ final class EngineConfig: ObservableObject {
         ) ?? .checkpoint
         localASRWhisperCppBinaryPath = defaults.string(forKey: Keys.localASRWhisperCppBinaryPath) ?? ""
         localASRWhisperCppModelPath = defaults.string(forKey: Keys.localASRWhisperCppModelPath) ?? ""
+        qwen3ASRUsePrompt = defaults.object(forKey: Keys.qwen3ASRUsePrompt) as? Bool ?? false
 
         let storedASRModel = defaults.string(forKey: Keys.asrModel)
             ?? LocalASRModelCatalog.descriptor(

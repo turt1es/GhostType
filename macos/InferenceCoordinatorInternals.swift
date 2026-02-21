@@ -85,7 +85,8 @@ extension InferenceCoordinator {
     }
 
     func lockedRoutePlan() -> InferenceRoutePlan {
-        let asrIsLocal = state.asrEngine == .localMLX
+        // Check if ASR is local by examining the provider's runtime kind
+        let asrIsLocal = state.asrEngine == .localMLX || state.localASRProvider.runtimeKind == .pythonInproc
         let llmIsLocal = state.llmEngine == .localMLX
         return InferenceRoutePlan(
             asrIsLocal: asrIsLocal,

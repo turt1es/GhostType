@@ -167,6 +167,7 @@ final class UserPreferences: UserDefaultsBackedObject {
         static let dictateShortcut = "GhostType.dictateShortcut"
         static let askShortcut = "GhostType.askShortcut"
         static let translateShortcut = "GhostType.translateShortcut"
+        static let llmPolishEnabled = "GhostType.llmPolishEnabled"
     }
 
     let defaults: UserDefaults
@@ -218,6 +219,9 @@ final class UserPreferences: UserDefaultsBackedObject {
 
     @UserDefaultBacked(key: Keys.restoreClipboardAfterPaste, defaultValue: true)
     var restoreClipboardAfterPaste: Bool
+
+    @UserDefaultBacked(key: Keys.llmPolishEnabled, defaultValue: true)
+    var llmPolishEnabled: Bool
 
     @UserDefaultBacked(key: Keys.pretranscribeEnabled, defaultValue: false)
     var pretranscribeEnabled: Bool

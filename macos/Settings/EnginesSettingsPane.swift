@@ -706,6 +706,205 @@ struct EnginesSettingsPane: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        case .mlxQwen3ASR:
+            let selectedDescriptor = qwen3ASRDescriptor()
+            
+            // MARK: - Active Configuration Section
+            Text(prefs.ui("当前配置", "Active Configuration"))
+                .font(.headline.weight(.semibold))
+            
+            if localInstalledQwen3ASRModels.isEmpty {
+                Text(prefs.ui("没有已安装的 Qwen3 ASR 模型。请使用下方的模型管理器下载。", "No installed Qwen3 ASR models. Use Model Manager below to download."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker(prefs.ui("选择模型（仅已安装）", "Select Model (installed only)"), selection: $engine.selectedLocalASRModelID) {
+                    ForEach(localInstalledQwen3ASRModels) { descriptor in
+                        Text(descriptor.displayName).tag(descriptor.id)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+            
+            // Status Box
+            GroupBox {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Circle()
+                            .fill(qwen3ASRStatusColor(for: selectedDescriptor))
+                            .frame(width: 8, height: 8)
+                        Text(prefs.ui("状态：", "Status:") + " \(qwen3ASRStatus(for: selectedDescriptor))")
+                            .font(.caption)
+                    }
+                    Text(prefs.ui("仓库：", "Repo:") + " \(selectedDescriptor.hfRepo)")
+                        .font(.caption)
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+            }
+            
+            // Prompt optimization toggle
+            Toggle(
+                prefs.ui("使用 Prompt 优化", "Use Prompt Optimization"),
+                isOn: $engine.qwen3ASRUsePrompt
+            )
+            
+            Text(
+                prefs.ui(
+                    "启用后，转录结果将使用个性化词典和写作风格进行优化。",
+                    "When enabled, transcription results will be optimized with personalization dictionary and writing style."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            
+            // MARK: - Model Manager Section
+            Text(prefs.ui("模型管理器", "Model Manager"))
+                .font(.headline.weight(.semibold))
+            
+            // Download New Model
+            Picker(prefs.ui("下载新模型", "Download New Model"), selection: $viewModel.pendingDownloadASRModelID) {
+                ForEach(downloadableQwen3ASRModels) { descriptor in
+                    HStack {
+                        Text(descriptor.displayName)
+                        if hasLocalWhisperCache(for: descriptor.hfRepo) {
+                            Text("(installed)")
+                        }
+                    }.tag(descriptor.id)
+                }
+            }
+            .pickerStyle(.menu)
+            .onAppear {
+                if viewModel.pendingDownloadASRModelID.isEmpty || !downloadableQwen3ASRModels.contains(where: { $0.id == viewModel.pendingDownloadASRModelID }) {
+                    viewModel.pendingDownloadASRModelID = downloadableQwen3ASRModels.first?.id ?? ""
+                }
+            }
+            
+            HStack(spacing: 8) {
+                Button(
+                    viewModel.downloadProgress.isDownloading
+                        ? "Downloading..."
+                        : "Download Model"
+                ) {
+                    Task {
+                        await downloadPendingLocalASRModel()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.downloadProgress.isDownloading || viewModel.probes.isClearingLocalASRModelCache || viewModel.pendingDownloadASRModelID.isEmpty)
+            }
+            
+            // Download Progress UI
+            if viewModel.downloadProgress.isDownloading || viewModel.downloadProgress.status == "verifying" || viewModel.downloadProgress.isComplete || viewModel.downloadProgress.isFailed {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        if viewModel.downloadProgress.status == "verifying" {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                            Text(prefs.ui("正在验证文件...", "Verifying files..."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if viewModel.downloadProgress.isDownloading {
+                            if viewModel.downloadProgress.downloadedBytes > 0 {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .foregroundStyle(.blue)
+                            } else {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            }
+                            Text(viewModel.downloadProgress.currentFile.isEmpty ? prefs.ui("正在下载...", "Downloading...") : viewModel.downloadProgress.currentFile)
+                                .font(.caption)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else if viewModel.downloadProgress.isComplete {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text(prefs.ui("下载完成！", "Download complete!"))
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        } else if viewModel.downloadProgress.isFailed {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.red)
+                            Text(viewModel.downloadProgress.errorMessage.isEmpty ? prefs.ui("下载失败", "Download failed") : viewModel.downloadProgress.errorMessage)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    
+                    if viewModel.downloadProgress.isDownloading || viewModel.downloadProgress.status == "verifying" {
+                        VStack(alignment: .leading, spacing: 4) {
+                            if viewModel.downloadProgress.status == "verifying" {
+                                ProgressView()
+                                    .progressViewStyle(.linear)
+                                Text(prefs.ui("正在验证完整性...", "Verifying integrity..."))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            } else if viewModel.downloadProgress.downloadedBytes == 0 {
+                                ProgressView()
+                                    .progressViewStyle(.linear)
+                                Text(prefs.ui("正在连接 Hugging Face...", "Connecting to Hugging Face..."))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                FakeDownloadProgressView(downloadedBytes: viewModel.downloadProgress.downloadedBytes)
+                                HStack(spacing: 16) {
+                                    Text(viewModel.downloadProgress.formattedDownloadedSize)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    if viewModel.downloadProgress.speedMbps > 0 {
+                                        Text(viewModel.downloadProgress.formattedSpeed)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.secondary.opacity(0.15))
+                )
+            }
+            
+            // Local Cache List
+            Text(prefs.ui("本地缓存：", "Local Cache:"))
+                .font(.headline.weight(.semibold))
+            
+            ForEach(localInstalledQwen3ASRModels, id: \.id) { descriptor in
+                HStack {
+                    Text(descriptor.displayName)
+                    Spacer()
+                    Button(prefs.ui("删除", "Delete")) {
+                        Task {
+                            engine.selectedLocalASRModelID = descriptor.id
+                            await clearSelectedLocalASRModelCache()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.probes.isDownloadingLocalASRModel || viewModel.probes.isClearingLocalASRModelCache)
+                }
+            }
+            
+            // Cache Actions
+            HStack(spacing: 8) {
+                Button(prefs.ui("在 Finder 中显示缓存", "Reveal Cache in Finder")) {
+                    revealSelectedLocalASRModelCacheInFinder()
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.probes.isDownloadingLocalASRModel || viewModel.probes.isClearingLocalASRModelCache)
+                
+                Button(prefs.ui("清除模型缓存", "Clear Model Cache")) {
+                    Task {
+                        await clearSelectedLocalASRModelCache()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.probes.isDownloadingLocalASRModel || viewModel.probes.isClearingLocalASRModelCache)
+            }
         case .funASRParaformer,
              .senseVoice,
              .weNet,
@@ -741,6 +940,54 @@ struct EnginesSettingsPane: View {
     private var localInstalledASRModels: [LocalASRModelDescriptor] {
         engine.localASRModelDescriptors.filter { descriptor in
             hasLocalWhisperCache(for: descriptor.hfRepo)
+        }
+    }
+
+    // MARK: - Qwen3 ASR Helper Variables
+    private var qwen3ASRModels: [LocalASRModelDescriptor] {
+        engine.localASRModelDescriptors.filter { descriptor in
+            descriptor.hfRepo.lowercased().contains("qwen3-asr")
+        }
+    }
+
+    private var downloadableQwen3ASRModels: [LocalASRModelDescriptor] {
+        qwen3ASRModels
+    }
+
+    private var localInstalledQwen3ASRModels: [LocalASRModelDescriptor] {
+        qwen3ASRModels.filter { descriptor in
+            hasLocalWhisperCache(for: descriptor.hfRepo)
+        }
+    }
+
+    private func qwen3ASRDescriptor() -> LocalASRModelDescriptor {
+        if let descriptor = qwen3ASRModels.first(where: { $0.id == engine.selectedLocalASRModelID }) {
+            return descriptor
+        }
+        return qwen3ASRModels.first ?? LocalASRModelDescriptor(
+            id: "mlx-community/Qwen3-ASR-0.6B-4bit",
+            displayName: "Qwen3 ASR 0.6B · 4bit",
+            hfRepo: "mlx-community/Qwen3-ASR-0.6B-4bit",
+            family: .small,
+            variant: .multilingual,
+            precision: .bit4,
+            isAdvanced: false,
+            estimatedDiskMB: nil,
+            estimatedRAMMB: nil
+        )
+    }
+
+    private func qwen3ASRStatus(for descriptor: LocalASRModelDescriptor) -> String {
+        hasLocalWhisperCache(for: descriptor.hfRepo) ? "Ready" : "Not Downloaded"
+    }
+
+    private func qwen3ASRStatusColor(for descriptor: LocalASRModelDescriptor) -> Color {
+        let status = qwen3ASRStatus(for: descriptor)
+        switch status {
+        case "Ready":
+            return .green
+        default:
+            return .gray
         }
     }
 
