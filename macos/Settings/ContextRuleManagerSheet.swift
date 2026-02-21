@@ -21,22 +21,6 @@ struct ContextRuleManagerSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(prefs.ui("规则列表", "Rules")) {
-                    if context.contextRoutingRules.isEmpty {
-                        Text(prefs.ui("暂无规则。", "No rules yet."))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(sortedRuleIDs, id: \.self) { ruleID in
-                            ContextRuleEditorRow(
-                                rule: binding(for: ruleID),
-                                presets: prompts.availablePromptPresets,
-                                prefs: prefs
-                            )
-                        }
-                        .onDelete(perform: deleteRules)
-                    }
-                }
-
                 Section(prefs.ui("自动切换", "Auto Switching")) {
                     Toggle(
                         prefs.ui("根据当前应用切换提示词", "Enable Auto Preset Switching"),
@@ -100,7 +84,24 @@ struct ContextRuleManagerSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                Section(prefs.ui("规则列表", "Rules")) {
+                    if context.contextRoutingRules.isEmpty {
+                        Text(prefs.ui("暂无规则。", "No rules yet."))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(sortedRuleIDs, id: \.self) { ruleID in
+                            ContextRuleEditorRow(
+                                rule: binding(for: ruleID),
+                                presets: prompts.availablePromptPresets,
+                                prefs: prefs,
+                                onDelete: { deleteRule(ruleID) }
+                            )
+                        }
+                    }
+                }
             }
+            .formStyle(.grouped)
             .navigationTitle(prefs.ui("上下文路由规则", "Context Routing Rules"))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -182,13 +183,8 @@ struct ContextRuleManagerSheet: View {
         draftMatchValue = ""
     }
 
-    private func deleteRules(at offsets: IndexSet) {
-        let idsToDelete: [String] = offsets.compactMap { offset in
-            guard sortedRuleIDs.indices.contains(offset) else { return nil }
-            return sortedRuleIDs[offset]
-        }
-        guard !idsToDelete.isEmpty else { return }
-        context.contextRoutingRules.removeAll { idsToDelete.contains($0.id) }
+    private func deleteRule(_ ruleID: String) {
+        context.contextRoutingRules.removeAll { $0.id == ruleID }
     }
 }
 
@@ -196,48 +192,60 @@ private struct ContextRuleEditorRow: View {
     @Binding var rule: RoutingRule
     let presets: [PromptPreset]
     let prefs: UserPreferences
+    let onDelete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Text("#\(rule.priority)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                Text(rule.id)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                Spacer()
-                Toggle("Enabled", isOn: $rule.enabled)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-            }
-
-            Picker(prefs.ui("匹配类型", "Match Type"), selection: $rule.matchType) {
-                ForEach(RoutingMatchType.allCases) { matchType in
-                    let labels = matchType.localizedLabels
-                    Text(prefs.ui(labels.zh, labels.en)).tag(matchType)
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("#\(rule.priority)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        Text(rule.id)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer()
+                    Toggle(prefs.ui("启用", "Enabled"), isOn: $rule.enabled)
+                        .toggleStyle(.switch)
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
                 }
-            }
-            .pickerStyle(.menu)
 
-            Stepper(value: $rule.priority, in: 0 ... 999) {
-                Text(prefs.ui("优先级：\(rule.priority)", "Priority: \(rule.priority)"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            TextField(prefs.ui("匹配值", "Match Value"), text: $rule.matchValue)
-                .textFieldStyle(.roundedBorder)
-
-            Picker(prefs.ui("目标预设", "Target Preset"), selection: $rule.targetPresetId) {
-                ForEach(presets) { preset in
-                    Text(preset.name).tag(preset.id)
+                Picker(prefs.ui("匹配类型", "Match Type"), selection: $rule.matchType) {
+                    ForEach(RoutingMatchType.allCases) { matchType in
+                        let labels = matchType.localizedLabels
+                        Text(prefs.ui(labels.zh, labels.en)).tag(matchType)
+                    }
                 }
+                .pickerStyle(.menu)
+
+                Stepper(value: $rule.priority, in: 0 ... 999) {
+                    Text(prefs.ui("优先级：\(rule.priority)", "Priority: \(rule.priority)"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                TextField(prefs.ui("匹配值", "Match Value"), text: $rule.matchValue)
+                    .textFieldStyle(.roundedBorder)
+
+                Picker(prefs.ui("目标预设", "Target Preset"), selection: $rule.targetPresetId) {
+                    ForEach(presets) { preset in
+                        Text(preset.name).tag(preset.id)
+                    }
+                }
+                .pickerStyle(.menu)
             }
-            .pickerStyle(.menu)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 2)
     }
 }
 
