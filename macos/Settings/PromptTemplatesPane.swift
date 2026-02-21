@@ -11,6 +11,36 @@ struct PromptTemplatesPane: View {
     @State private var showingContextRuleManager = false
     @State private var showingContextDebugPanel = false
 
+    private var activeDictationPromptBinding: Binding<String> {
+        prompts.promptLengthMode == .long
+            ? $prompts.dictateSystemPromptTemplate
+            : $prompts.shortDictateSystemPromptTemplate
+    }
+
+    private var activeAskPromptBinding: Binding<String> {
+        prompts.promptLengthMode == .long
+            ? $prompts.askSystemPromptTemplate
+            : $prompts.shortAskSystemPromptTemplate
+    }
+
+    private var activeTranslatePromptBinding: Binding<String> {
+        prompts.promptLengthMode == .long
+            ? $prompts.translateSystemPromptTemplate
+            : $prompts.shortTranslateSystemPromptTemplate
+    }
+
+    private var activeGeminiASRPromptBinding: Binding<String> {
+        prompts.promptLengthMode == .long
+            ? $prompts.geminiASRPromptTemplate
+            : $prompts.shortGeminiASRPromptTemplate
+    }
+
+    private var promptLengthSectionTitleSuffix: String {
+        prompts.promptLengthMode == .long
+            ? prefs.ui("（长提示词）", " (Long)")
+            : prefs.ui("（短提示词）", " (Short)")
+    }
+
     var body: some View {
         DetailContainer(
             icon: "text.bubble",
@@ -83,6 +113,31 @@ struct PromptTemplatesPane: View {
                     }
                 }
 
+                Section(prefs.ui("提示词长度", "Prompt Length")) {
+                    Picker(
+                        prefs.ui("模式", "Mode"),
+                        selection: $prompts.promptLengthMode
+                    ) {
+                        Text(prefs.ui("长提示词", "Long Prompt")).tag(PromptLengthMode.long)
+                        Text(prefs.ui("短提示词", "Short Prompt")).tag(PromptLengthMode.short)
+                    }
+                    .pickerStyle(.segmented)
+
+                    Toggle(
+                        prefs.ui("自动长短提示词切换", "Auto Switch Long/Short Prompt"),
+                        isOn: $prompts.autoPromptLengthSwitchingEnabled
+                    )
+
+                    Text(
+                        prefs.ui(
+                            "短提示词推荐给本地模型：更快且 token 消耗更少；长提示词推荐给云端模型：遵循能力更好。切换 Local/Cloud 时会自动同步（可关闭自动切换）。",
+                            "Short prompts are recommended for local models for faster speed and fewer tokens; long prompts are recommended for cloud models for stronger instruction adherence. The toggle auto-syncs when switching Local/Cloud (can be disabled)."
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
                 Section(prefs.ui("自动切换", "Auto Switching")) {
                     Toggle(
                         prefs.ui("根据当前应用切换提示词", "Enable Auto Preset Switching"),
@@ -149,20 +204,20 @@ struct PromptTemplatesPane: View {
                     }
                 }
 
-                Section("Dictation System Prompt") {
-                    PromptEditor(text: $prompts.dictateSystemPromptTemplate)
+                Section("Dictation System Prompt\(promptLengthSectionTitleSuffix)") {
+                    PromptEditor(text: activeDictationPromptBinding)
                 }
 
-                Section("Ask System Prompt") {
-                    PromptEditor(text: $prompts.askSystemPromptTemplate)
+                Section("Ask System Prompt\(promptLengthSectionTitleSuffix)") {
+                    PromptEditor(text: activeAskPromptBinding)
                 }
 
-                Section("Translate System Prompt") {
-                    PromptEditor(text: $prompts.translateSystemPromptTemplate)
+                Section("Translate System Prompt\(promptLengthSectionTitleSuffix)") {
+                    PromptEditor(text: activeTranslatePromptBinding)
                 }
 
-                Section("Gemini ASR Prompt") {
-                    PromptEditor(text: $prompts.geminiASRPromptTemplate, minHeight: 120)
+                Section("Gemini ASR Prompt\(promptLengthSectionTitleSuffix)") {
+                    PromptEditor(text: activeGeminiASRPromptBinding, minHeight: 120)
                 }
             }
             .formStyle(.grouped)

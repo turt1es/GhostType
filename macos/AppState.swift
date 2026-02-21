@@ -12,6 +12,7 @@ final class AppState: ObservableObject {
     let context: ContextRoutingState
 
     private var moduleCancellables = Set<AnyCancellable>()
+    private var coordinationCancellables = Set<AnyCancellable>()
     private lazy var promptStore = PromptTemplateStore()
     private var promptStoreBound = false
 
@@ -26,6 +27,7 @@ final class AppState: ObservableObject {
         runtime = RuntimeState()
         context = ContextRoutingState()
         bridgeModuleChanges()
+        setupPromptLengthCoordination()
     }
 
     subscript<T>(dynamicMember keyPath: KeyPath<EngineConfig, T>) -> T {
@@ -133,6 +135,10 @@ final class AppState: ObservableObject {
         prompts.resolvedDictateSystemPrompt(lockedDictationPrompt: lockedDictationPrompt)
     }
 
+    func resolvedDictationPrompt(for preset: PromptPreset) -> String {
+        prompts.resolvedDictationPrompt(for: preset)
+    }
+
     func resolvedAskSystemPrompt() -> String {
         prompts.resolvedAskSystemPrompt()
     }
@@ -190,6 +196,18 @@ final class AppState: ObservableObject {
         promptStoreBound = false
     }
 
+    private func setupPromptLengthCoordination() {
+        coordinationCancellables.removeAll()
+        engine.$llmEngine
+            .removeDuplicates()
+            .sink { [weak self] llmEngine in
+                self?.prompts.applyAutoPromptLength(for: llmEngine)
+            }
+            .store(in: &coordinationCancellables)
+
+        prompts.applyAutoPromptLength(for: engine.llmEngine)
+    }
+
     private func ensurePromptStore() -> PromptTemplateStore {
         if !promptStoreBound {
             bindModule(promptStore)
@@ -238,6 +256,7 @@ final class AppState: ObservableObject {
             "pretranscribeEndSilenceMS", "pretranscribeMaxInFlight", "pretranscribeFallbackPolicy",
             "dictateShortcut", "askShortcut", "translateShortcut",
             "selectedPromptPresetID", "customPromptPresets",
+            "promptLengthMode", "autoPromptLengthSwitchingEnabled",
             // Note: prompt template content keys are intentionally excluded —
             // let PromptTemplateStore always load the latest builtin content on first run.
             "contextAutoPresetSwitchingEnabled", "contextLockCurrentPreset",

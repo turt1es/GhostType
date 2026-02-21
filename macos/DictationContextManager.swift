@@ -44,7 +44,7 @@ final class DictationContextManager {
             preset: DictationResolvedPreset(
                 id: preset.id,
                 title: preset.name,
-                dictationPrompt: preset.dictateSystemPrompt
+                dictationPrompt: state.resolvedDictationPrompt(for: preset)
             ),
             matchedRule: resolution.matchedRule
         )
