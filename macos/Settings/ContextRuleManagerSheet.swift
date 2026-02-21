@@ -29,14 +29,15 @@ struct ContextRuleManagerSheet: View {
                         ForEach(sortedRuleIDs, id: \.self) { ruleID in
                             ContextRuleEditorRow(
                                 rule: binding(for: ruleID),
-                                presets: prompts.availablePromptPresets
+                                presets: prompts.availablePromptPresets,
+                                prefs: prefs
                             )
                         }
                         .onDelete(perform: deleteRules)
                     }
                 }
 
-                Section(prefs.ui("新增规则", "Add Rule")) {
+                Section(prefs.ui("自动切换", "Auto Switching")) {
                     Toggle(
                         prefs.ui("根据当前应用切换提示词", "Enable Auto Preset Switching"),
                         isOn: $context.contextAutoPresetSwitchingEnabled
@@ -59,10 +60,13 @@ struct ContextRuleManagerSheet: View {
                         }
                     }
                     .pickerStyle(.menu)
+                }
 
+                Section(prefs.ui("新增规则", "Add Rule")) {
                     Picker(prefs.ui("匹配类型", "Match Type"), selection: $draftMatchType) {
                         ForEach(RoutingMatchType.allCases) { matchType in
-                            Text(matchType.rawValue).tag(matchType)
+                            let labels = matchType.localizedLabels
+                            Text(prefs.ui(labels.zh, labels.en)).tag(matchType)
                         }
                     }
 
@@ -99,13 +103,6 @@ struct ContextRuleManagerSheet: View {
             }
             .navigationTitle(prefs.ui("上下文路由规则", "Context Routing Rules"))
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Toggle(
-                        prefs.ui("根据当前应用切换提示词", "Auto Switch"),
-                        isOn: $context.contextAutoPresetSwitchingEnabled
-                    )
-                    .toggleStyle(.switch)
-                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(prefs.ui("完成", "Done")) {
                         dismiss()
@@ -198,9 +195,10 @@ struct ContextRuleManagerSheet: View {
 private struct ContextRuleEditorRow: View {
     @Binding var rule: RoutingRule
     let presets: [PromptPreset]
+    let prefs: UserPreferences
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 Text("#\(rule.priority)")
                     .font(.caption.monospacedDigit())
@@ -215,29 +213,45 @@ private struct ContextRuleEditorRow: View {
                     .labelsHidden()
             }
 
-            Picker("Match Type", selection: $rule.matchType) {
+            Picker(prefs.ui("匹配类型", "Match Type"), selection: $rule.matchType) {
                 ForEach(RoutingMatchType.allCases) { matchType in
-                    Text(matchType.rawValue).tag(matchType)
+                    let labels = matchType.localizedLabels
+                    Text(prefs.ui(labels.zh, labels.en)).tag(matchType)
                 }
             }
             .pickerStyle(.menu)
 
             Stepper(value: $rule.priority, in: 0 ... 999) {
-                Text("Priority: \(rule.priority)")
+                Text(prefs.ui("优先级：\(rule.priority)", "Priority: \(rule.priority)"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            TextField("Match Value", text: $rule.matchValue)
+            TextField(prefs.ui("匹配值", "Match Value"), text: $rule.matchValue)
                 .textFieldStyle(.roundedBorder)
 
-            Picker("Target Preset", selection: $rule.targetPresetId) {
+            Picker(prefs.ui("目标预设", "Target Preset"), selection: $rule.targetPresetId) {
                 ForEach(presets) { preset in
                     Text(preset.name).tag(preset.id)
                 }
             }
             .pickerStyle(.menu)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+    }
+}
+
+private extension RoutingMatchType {
+    var localizedLabels: (zh: String, en: String) {
+        switch self {
+        case .domainExact:
+            return ("域名精确匹配", "Domain Exact")
+        case .domainSuffix:
+            return ("域名后缀匹配", "Domain Suffix")
+        case .appBundleId:
+            return ("应用 Bundle ID", "App Bundle ID")
+        case .windowTitleRegex:
+            return ("窗口标题正则", "Window Title Regex")
+        }
     }
 }
